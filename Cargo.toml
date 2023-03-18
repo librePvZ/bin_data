@@ -1,15 +1,12 @@
-[package]
-name = "bin_data"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+members = [
+    "bin_data",
+]
+resolver = "2"
+
+[workspace.package]
 authors = ["Ruifeng Xie <ruifengx@outlook.com>"]
 repository = "https://github.com/librePvZ/bin_data"
 homepage = "https://github.com/librePvZ/bin_data"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-description = "declarative encoding and decoding for binary formats"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-thiserror = "1.0.39"
