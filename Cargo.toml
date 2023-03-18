@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "bin_data",
+    "bin_data_macros",
 ]
 resolver = "2"
 
