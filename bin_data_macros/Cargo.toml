@@ -16,3 +16,6 @@ readme.workspace = true
 proc-macro = true
 
 [dependencies]
+proc-macro2 = "1.0.52"
+quote = "1.0.26"
+syn = "2.0.0"
