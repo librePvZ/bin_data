@@ -1,7 +1,8 @@
+use itertools::Itertools;
 use proc_macro2::{Ident, TokenStream};
 use quote::ToTokens;
 use syn::punctuated::Punctuated;
-use syn::{Token, parenthesized, braced, Attribute, Visibility, Type, Generics};
+use syn::{Token, parenthesized, braced, Attribute, Visibility, Type, Generics, MacroDelimiter, Meta};
 use syn::parse::{Parse, ParseStream};
 use syn::token::{Brace, Paren};
 
@@ -37,8 +38,7 @@ pub enum Entry {
 
 impl Parse for Entry {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let lookahead = input.lookahead1();
-        if lookahead.peek(Token![@]) {
+        if input.peek(Token![@]) {
             input.parse().map(Entry::Directive)
         } else {
             input.parse().map(Entry::Field)
@@ -75,6 +75,7 @@ impl ToTokens for Directive {
 }
 
 pub struct Field {
+    pub known_attrs: Vec<KnownAttribute>,
     pub attrs: Vec<Attribute>,
     pub kind: FieldKind,
     pub name: Ident,
@@ -84,8 +85,13 @@ pub struct Field {
 
 impl Parse for Field {
     fn parse(input: ParseStream) -> syn::Result<Self> {
+        let attrs = Attribute::parse_outer(input)?;
+        let (known_attrs, attrs) = attrs.into_iter()
+            .map(KnownAttribute::try_from)
+            .partition_result();
         Ok(Field {
-            attrs: Attribute::parse_outer(input)?,
+            known_attrs,
+            attrs,
             kind: input.parse()?,
             name: input.parse()?,
             colon_token: input.parse()?,
@@ -104,6 +110,23 @@ impl ToTokens for Field {
     }
 }
 
+pub struct KnownAttribute {
+    pub delimiter: MacroDelimiter,
+    pub tokens: TokenStream,
+}
+
+impl TryFrom<Attribute> for KnownAttribute {
+    type Error = Attribute;
+    fn try_from(attr: Attribute) -> Result<KnownAttribute, Attribute> {
+        if !attr.path().is_ident("bin_data") { return Err(attr); }
+        let Meta::List(list) = attr.meta else { return Err(attr); };
+        Ok(KnownAttribute {
+            delimiter: list.delimiter,
+            tokens: list.tokens,
+        })
+    }
+}
+
 pub enum FieldKind {
     Field(Visibility),
     Temp(Token![let]),
@@ -111,8 +134,7 @@ pub enum FieldKind {
 
 impl Parse for FieldKind {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let lookahead = input.lookahead1();
-        if lookahead.peek(Token![let]) {
+        if input.peek(Token![let]) {
             input.parse().map(FieldKind::Temp)
         } else {
             input.parse().map(FieldKind::Field)
