@@ -63,10 +63,10 @@ impl<T> VecArgsBuilder<Required, T, fn(T) -> T> {
     }
 }
 
-impl<T> VecArgsBuilder<std::iter::Repeat<()>, T, fn(&T) -> &T> {
+impl<T> VecArgsBuilder<Provided<std::iter::Repeat<()>>, T, fn(&T) -> &T> {
     pub(crate) fn new() -> Self {
         VecArgsBuilder {
-            element_args: std::iter::repeat(()),
+            element_args: Provided(std::iter::repeat(())),
             transform: |x| x,
             _marker: PhantomData,
         }

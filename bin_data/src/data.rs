@@ -2,7 +2,7 @@
 
 use std::io::{Read, Write};
 use std::ops::Deref;
-use crate::named_args::{ArgsBuilderFinished, Endian, EndianBuilder, InheritEndian, NamedArgs, Required, VecArgs, VecArgsBuilder};
+use crate::named_args::{ArgsBuilderFinished, Endian, EndianBuilder, InheritEndian, NamedArgs, Provided, Required, VecArgs, VecArgsBuilder};
 use crate::stream::{dir, DecodeError, Direction, EncodeError};
 
 /// Decode binary data to structured in-memory representation.
@@ -43,6 +43,55 @@ impl<Args, T: Encode<Args> + ?Sized> Encode<Args> for Box<T> {
 pub trait View<T: ?Sized> {}
 
 impl<T: ?Sized> View<T> for &'_ T {}
+impl<T: ?Sized> View<Box<T>> for &'_ T {}
+impl<T> View<Vec<T>> for &'_ [T] {}
+
+/// View into a slice, with every element projected using `P`.
+#[derive(Debug, Copy, Clone)]
+pub struct SliceView<'a, T, P> {
+    base_slice: &'a [T],
+    projector: P,
+}
+
+// the `Fn` bound for `P` should help type inference
+impl<'a, T, U: 'a, P: Fn(&T) -> &U> SliceView<'a, T, P> {
+    /// Create a new view into the slice.
+    pub fn new(base_slice: &'a [T], projector: P) -> Self {
+        SliceView { base_slice, projector }
+    }
+}
+
+impl<'a, T, U: 'a, P: Fn(&T) -> &U> View<Vec<U>> for SliceView<'a, T, P> {}
+impl<'a, T, U: 'a, P: Fn(&T) -> &U> View<Box<[U]>> for SliceView<'a, T, P> {}
+
+impl<'a, T, U: 'a, P: Fn(&T) -> &U> IntoIterator for SliceView<'a, T, P> {
+    type Item = &'a U;
+    type IntoIter = std::iter::Map<std::slice::Iter<'a, T>, P>;
+    fn into_iter(self) -> Self::IntoIter { self.base_slice.iter().map(self.projector) }
+}
+
+impl<'a, 'b, T, U: 'a, P: Fn(&T) -> &U> IntoIterator for &'b SliceView<'a, T, P> {
+    type Item = &'b U;
+    type IntoIter = std::iter::Map<std::slice::Iter<'b, T>, &'b P>;
+    fn into_iter(self) -> Self::IntoIter { self.base_slice.iter().map(&self.projector) }
+}
+
+impl<'a, A, B: 'a, P: Fn(&A) -> &B> NamedArgs<dir::Write> for SliceView<'a, A, P> {
+    type ArgsBuilder = VecArgsBuilder<Provided<std::iter::Repeat<()>>, B, fn(&B) -> &B>;
+    fn args_builder() -> Self::ArgsBuilder { Self::ArgsBuilder::new() }
+}
+
+impl<'a, A, B: 'a, P: Fn(&A) -> &B, Args, U, F> Encode<VecArgs<Args, B, F>> for SliceView<'a, A, P>
+    where Args: Iterator, U: Encode<Args::Item>, F: Fn(&B) -> &U {
+    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, args: VecArgs<Args, B, F>) -> Result<(), EncodeError> {
+        let mut element_args = args.element_args;
+        self.into_iter().map(&args.transform).try_for_each(|x| {
+            const ERR: EncodeError = EncodeError::InvalidArgument("Vec", "not enough arguments");
+            let arg = element_args.next().ok_or(ERR)?;
+            x.encode_with(writer, arg)
+        })
+    }
+}
 
 /// Used in automatically generated code to aid type inference.
 pub fn assert_is_view<T: ?Sized, U: View<T>>(x: U) -> U { x }
@@ -188,7 +237,7 @@ impl<Args, U, T, F> Decode<VecArgs<Args, U, F>> for Vec<T>
 }
 
 impl<T> NamedArgs<dir::Write> for Vec<T> {
-    type ArgsBuilder = VecArgsBuilder<std::iter::Repeat<()>, T, fn(&T) -> &T>;
+    type ArgsBuilder = VecArgsBuilder<Provided<std::iter::Repeat<()>>, T, fn(&T) -> &T>;
     fn args_builder() -> Self::ArgsBuilder { Self::ArgsBuilder::new() }
 }
 
@@ -200,7 +249,7 @@ impl<Args, U, T, F> Encode<VecArgs<Args, T, F>> for Vec<T>
 }
 
 impl<T> NamedArgs<dir::Write> for [T] {
-    type ArgsBuilder = VecArgsBuilder<std::iter::Repeat<()>, T, fn(&T) -> &T>;
+    type ArgsBuilder = VecArgsBuilder<Provided<std::iter::Repeat<()>>, T, fn(&T) -> &T>;
     fn args_builder() -> Self::ArgsBuilder { Self::ArgsBuilder::new() }
 }
 

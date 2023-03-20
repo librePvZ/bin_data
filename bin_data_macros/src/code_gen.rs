@@ -145,16 +145,13 @@ fn encode_entry(
         Entry::Directive(directive) => quote!(writer.#directive?;),
         Entry::Field(Field { name, r#type, .. }) => {
             let args = args.as_ref().unwrap();
-            let arg_setters = args.decode.arg_setters();
+            let arg_setters = args.encode.arg_setters();
             let local_endian = args.endian.map(|endian| quote!(.inherit_endian(#endian)));
-            match args.decode.calculate {
-                Some(decode) => quote!(let #name: #r#type = #decode;),
-                None => quote_spanned! { name.span() =>
-                    #name.encode_with(writer, ArgsBuilderFinished::finish(
-                        <#r#type as NamedArgs<dir::Write>>::args_builder()
-                        #arg_setters #local_endian #global_endian
-                    ))?;
-                },
+            quote_spanned! { name.span() =>
+                #name.encode_with(writer, ArgsBuilderFinished::finish(
+                    <#r#type as NamedArgs<dir::Write>>::args_builder()
+                    #arg_setters #local_endian #global_endian
+                ))?;
             }
         }
     }
