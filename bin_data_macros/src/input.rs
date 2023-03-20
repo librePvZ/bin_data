@@ -18,6 +18,15 @@ pub struct Input {
     pub entries: Punctuated<Entry, Token![,]>,
 }
 
+impl Input {
+    pub fn fields(&self) -> impl Iterator<Item = &Field> {
+        self.entries.iter().filter_map(|entry| match entry {
+            Entry::Field(field @ Field { kind: FieldKind::Field(_), .. }) => Some(field),
+            _ => None,
+        })
+    }
+}
+
 impl Parse for Input {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let attrs = Attribute::parse_outer(input)?;
@@ -138,10 +147,7 @@ impl ToTokens for Field {
 }
 
 pub enum KnownAttribute {
-    Endian {
-        endian_token: Ident,
-        value: Expr,
-    },
+    Endian(Expr),
     Encode(Expr),
     Decode(Expr),
     ArgsDecl {
@@ -168,7 +174,7 @@ impl KnownAttribute {
             }
             let contents;
             match cmd.to_string().as_str() {
-                "endian" => eq_expr(input, |value| KnownAttribute::Endian { endian_token: cmd, value }),
+                "endian" => eq_expr(input, KnownAttribute::Endian),
                 "encode" => eq_expr(input, KnownAttribute::Encode),
                 "decode" => eq_expr(input, KnownAttribute::Decode),
                 "args" if field => Ok(KnownAttribute::ArgsAssign {
@@ -187,10 +193,24 @@ impl KnownAttribute {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum Direction {
     Encode,
     Decode,
     Both,
+}
+
+impl Direction {
+    pub fn dispatch<T>(self, encode: &mut T, decode: &mut T, f: impl Fn(&mut T)) {
+        match self {
+            Direction::Encode => f(encode),
+            Direction::Decode => f(decode),
+            Direction::Both => {
+                f(encode);
+                f(decode);
+            }
+        }
+    }
 }
 
 impl Parse for Direction {
