@@ -120,7 +120,7 @@ impl From<FromUtf8Error> for DecodeError {
     }
 }
 
-impl<R: Read> Stream<dir::Read> for R {
+impl<R: Read + ?Sized> Stream<dir::Read> for R {
     type StreamError = DecodeError;
     fn magic<M: IntoMagic>(&mut self, magic: M) -> Result<(), DecodeError> {
         use DecodeError::IncompleteData;
@@ -157,7 +157,7 @@ pub enum EncodeError {
     Io(#[from] std::io::Error),
 }
 
-impl<W: Write> Stream<dir::Write> for W {
+impl<W: Write + ?Sized> Stream<dir::Write> for W {
     type StreamError = EncodeError;
     fn magic<M: IntoMagic>(&mut self, magic: M) -> Result<(), EncodeError> {
         let magic = magic.into_magic();
