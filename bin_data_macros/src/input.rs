@@ -2,11 +2,13 @@ use itertools::Itertools;
 use proc_macro2::{Ident, TokenStream};
 use quote::ToTokens;
 use syn::punctuated::Punctuated;
-use syn::{Token, parenthesized, braced, Attribute, Visibility, Type, Generics, MacroDelimiter, Meta};
+use syn::{Token, parenthesized, braced, Attribute, Visibility, Type, Generics, Meta, Expr, Error};
 use syn::parse::{Parse, ParseStream};
 use syn::token::{Brace, Paren};
 
+/// Input for the macro. Looks like a `struct` definition.
 pub struct Input {
+    pub known_attrs: Vec<KnownAttribute>,
     pub attrs: Vec<Attribute>,
     pub vis: Visibility,
     pub struct_token: Token![struct],
@@ -18,21 +20,28 @@ pub struct Input {
 
 impl Parse for Input {
     fn parse(input: ParseStream) -> syn::Result<Self> {
+        let attrs = Attribute::parse_outer(input)?;
+        let (ResultVec(known_attrs), attrs) = attrs.into_iter()
+            .map(|attr| KnownAttribute::new(attr, false))
+            .partition_result();
         let contents;
         Ok(Input {
-            attrs: Attribute::parse_outer(input)?,
+            known_attrs: known_attrs?,
+            attrs,
             vis: input.parse()?,
             struct_token: input.parse()?,
             name: input.parse()?,
             generics: input.parse()?,
             brace_token: braced!(contents in input),
-            entries: contents.parse_terminated(Entry::parse, Token![,])?,
+            entries: Punctuated::parse_terminated(&contents)?,
         })
     }
 }
 
 pub enum Entry {
-    Directive(TokenStream),
+    /// Stream directives: `@directive(arguments...)`
+    Directive(Directive),
+    /// Field and temporaries: `pub field: Type`
     Field(Field),
 }
 
@@ -83,14 +92,32 @@ pub struct Field {
     pub r#type: Type,
 }
 
+struct ResultVec<T, E>(Result<Vec<T>, E>);
+
+impl<T, E> Default for ResultVec<T, E> {
+    fn default() -> Self { ResultVec(Ok(Vec::new())) }
+}
+
+impl<T, E> Extend<Result<T, E>> for ResultVec<T, E> {
+    fn extend<I: IntoIterator<Item = Result<T, E>>>(&mut self, iter: I) {
+        let Ok(target) = &mut self.0 else { return; };
+        for item in iter {
+            match item {
+                Ok(value) => target.push(value),
+                Err(err) => return self.0 = Err(err),
+            }
+        }
+    }
+}
+
 impl Parse for Field {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let attrs = Attribute::parse_outer(input)?;
-        let (known_attrs, attrs) = attrs.into_iter()
-            .map(KnownAttribute::try_from)
+        let (ResultVec(known_attrs), attrs) = attrs.into_iter()
+            .map(|attr| KnownAttribute::new(attr, true))
             .partition_result();
         Ok(Field {
-            known_attrs,
+            known_attrs: known_attrs?,
             attrs,
             kind: input.parse()?,
             name: input.parse()?,
@@ -110,19 +137,108 @@ impl ToTokens for Field {
     }
 }
 
-pub struct KnownAttribute {
-    pub delimiter: MacroDelimiter,
-    pub tokens: TokenStream,
+pub enum KnownAttribute {
+    Endian {
+        endian_token: Ident,
+        value: Expr,
+    },
+    Encode(Expr),
+    Decode(Expr),
+    ArgsDecl {
+        direction: Direction,
+        brace_token: Brace,
+        fields: Punctuated<ArgFieldDecl, Token![,]>,
+    },
+    ArgsAssign {
+        direction: Direction,
+        brace_token: Brace,
+        fields: Punctuated<ArgFieldAssign, Token![,]>,
+    },
 }
 
-impl TryFrom<Attribute> for KnownAttribute {
-    type Error = Attribute;
-    fn try_from(attr: Attribute) -> Result<KnownAttribute, Attribute> {
+impl KnownAttribute {
+    fn new(attr: Attribute, field: bool) -> Result<syn::Result<KnownAttribute>, Attribute> {
         if !attr.path().is_ident("bin_data") { return Err(attr); }
         let Meta::List(list) = attr.meta else { return Err(attr); };
-        Ok(KnownAttribute {
-            delimiter: list.delimiter,
-            tokens: list.tokens,
+        Ok(list.parse_args_with(|input: ParseStream| {
+            let cmd: Ident = input.parse()?;
+            fn eq_expr<T>(input: ParseStream, f: impl FnOnce(Expr) -> T) -> Result<T, Error> {
+                let _: Token![=] = input.parse()?;
+                input.parse().map(f)
+            }
+            let contents;
+            match cmd.to_string().as_str() {
+                "endian" => eq_expr(input, |value| KnownAttribute::Endian { endian_token: cmd, value }),
+                "encode" => eq_expr(input, KnownAttribute::Encode),
+                "decode" => eq_expr(input, KnownAttribute::Decode),
+                "args" if field => Ok(KnownAttribute::ArgsAssign {
+                    direction: input.parse()?,
+                    brace_token: braced!(contents in input),
+                    fields: Punctuated::parse_terminated(&contents)?,
+                }),
+                "args" => Ok(KnownAttribute::ArgsDecl {
+                    direction: input.parse()?,
+                    brace_token: braced!(contents in input),
+                    fields: Punctuated::parse_terminated(&contents)?,
+                }),
+                _ => Err(Error::new(cmd.span(), "unknown attribute for `bin_data`")),
+            }
+        }))
+    }
+}
+
+pub enum Direction {
+    Encode,
+    Decode,
+    Both,
+}
+
+impl Parse for Direction {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let colon_token: Option<Token![:]> = input.parse()?;
+        Ok(if colon_token.is_some() {
+            let dir: Ident = input.parse()?;
+            match dir.to_string().as_str() {
+                "encode" => Direction::Encode,
+                "decode" => Direction::Decode,
+                _ => return Err(Error::new(dir.span(), "unknown direction, must be `encode` or `decode`")),
+            }
+        } else {
+            Direction::Both
+        })
+    }
+}
+
+pub struct ArgFieldDecl {
+    pub name: Ident,
+    pub colon_token: Token![:],
+    pub r#type: Type,
+    pub default_value: Option<Expr>,
+}
+
+impl Parse for ArgFieldDecl {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let name = input.parse()?;
+        let colon_token = input.parse()?;
+        let r#type = input.parse()?;
+        let eq_token: Option<Token![=]> = input.parse()?;
+        let default_value = if eq_token.is_some() { Some(input.parse()?) } else { None };
+        Ok(ArgFieldDecl { name, colon_token, r#type, default_value })
+    }
+}
+
+pub struct ArgFieldAssign {
+    pub name: Ident,
+    pub eq_token: Token![=],
+    pub value: Expr,
+}
+
+impl Parse for ArgFieldAssign {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(ArgFieldAssign {
+            name: input.parse()?,
+            eq_token: input.parse()?,
+            value: input.parse()?,
         })
     }
 }

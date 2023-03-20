@@ -20,3 +20,6 @@ itertools = "0.10.5"
 proc-macro2 = "1.0.52"
 quote = "1.0.26"
 syn = "2.0.0"
+
+[dev-dependencies]
+bin_data.path = "../bin_data"
