@@ -1,0 +1,7 @@
+error[E0277]: the trait bound `EndianBuilder<Required>: ArgsBuilderFinished` is not satisfied
+ --> tests/ui/missing-argument.rs:5:9
+  |
+5 |         this_field_needs_an_endian: u32,
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `ArgsBuilderFinished` is not implemented for `EndianBuilder<Required>`
+  |
+  = help: the trait `ArgsBuilderFinished` is implemented for `EndianBuilder<Provided<Endian>>`

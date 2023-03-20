@@ -1,0 +1,34 @@
+error[E0277]: the trait bound `&str: View<u32>` is not satisfied
+  --> tests/ui/encode-wrong-type.rs:7:29
+   |
+4  | / bin_data! {
+5  | |     #[bin_data(endian = Endian::Little)]
+6  | |     pub struct MissingEndian {
+7  | |         #[bin_data(encode = "u32 expected")]
+   | |                             ^^^^^^^^^^^^^^ the trait `View<u32>` is not implemented for `&str`
+...  |
+11 | |     }
+12 | | }
+   | |_- required by a bound introduced by this call
+   |
+   = help: the following other types implement trait `View<T>`:
+             <&T as View<T>>
+             <f32 as View<f32>>
+             <f64 as View<f64>>
+             <i128 as View<i128>>
+             <i16 as View<i16>>
+             <i32 as View<i32>>
+             <i64 as View<i64>>
+             <i8 as View<i8>>
+           and $N others
+note: required by a bound in `assert_is_view`
+  --> $WORKSPACE/bin_data/src/data.rs
+   |
+   | pub fn assert_is_view<T: ?Sized, U: View<T>>(x: U) -> U { x }
+   |                                     ^^^^^^^ required by this bound in `assert_is_view`
+
+error[E0599]: no method named `encode_with` found for reference `&str` in the current scope
+ --> tests/ui/encode-wrong-type.rs:8:13
+  |
+8 |         let temporary: u32,
+  |             ^^^^^^^^^ help: there is a method with a similar name: `ends_with`
