@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use bin_data::data::{Decode, Encode};
 use bin_data::named_args::Endian;
 use bin_data_macros::bin_data;
