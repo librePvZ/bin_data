@@ -135,3 +135,73 @@ pub fn impl_decode(
         }
     });
 }
+
+fn encode_entry(
+    global_endian: &Option<TokenStream>,
+    entry: &Entry,
+    args: &Option<ExtractedArgs>,
+) -> TokenStream {
+    match entry {
+        Entry::Directive(directive) => quote!(writer.#directive?;),
+        Entry::Field(Field { name, r#type, .. }) => {
+            let args = args.as_ref().unwrap();
+            let arg_setters = args.decode.arg_setters();
+            let local_endian = args.endian.map(|endian| quote!(.inherit_endian(#endian)));
+            match args.decode.calculate {
+                Some(decode) => quote!(let #name: #r#type = #decode;),
+                None => quote_spanned! { name.span() =>
+                    #name.encode_with(writer, ArgsBuilderFinished::finish(
+                        <#r#type as NamedArgs<dir::Write>>::args_builder()
+                        #arg_setters #local_endian #global_endian
+                    ))?;
+                },
+            }
+        }
+    }
+}
+
+pub fn impl_encode(
+    input: &Input,
+    args: &ExtractedArgs,
+    field_args: &[Option<ExtractedArgs>],
+    result: &mut TokenStream,
+) {
+    let (impl_generics, type_generics, where_clause) = input.generics.split_for_impl();
+    let global_endian = args.endian.map(|endian| quote!(.inherit_endian(#endian)));
+    let fields = input.fields().map(|field| &field.name);
+    let entries = input.entries.iter().zip_eq(field_args);
+    let temps = entries.clone()
+        .filter_map(|(entry, arg)| entry.as_temp()
+            .map(|field| (&field.name, &field.r#type, arg.as_ref().unwrap())))
+        .map(|(name, r#type, arg)| match arg.encode.calculate {
+            Some(value) => quote!(let #name: #r#type = #value;),
+            None => quote_spanned! { name.span() =>
+                let #name: #r#type = compile_error!("temporary field requires an `encode` attribute");
+            },
+        });
+    let entries = entries.clone()
+        .filter(|&(_, arg)| arg.as_ref()
+            .map_or(true, |arg| arg.decode.calculate.is_none()))
+        .map(|(entry, arg)| encode_entry(&global_endian, entry, arg));
+    let name = &input.name;
+    result.extend(quote! {
+        impl #impl_generics ::bin_data::named_args::NamedArgs<::bin_data::stream::dir::Write>
+            for #name #type_generics #where_clause {
+            type ArgsBuilder = ::bin_data::named_args::NoArgs;
+            fn args_builder() -> Self::ArgsBuilder { ::bin_data::named_args::NoArgs }
+        }
+        impl #impl_generics ::bin_data::data::Encode for #name #type_generics #where_clause {
+            #[allow(unused_import)]
+            fn encode_with<W: std::io::Write + ?Sized>(&self, writer: &mut W, args: ())
+                -> Result<(), ::bin_data::stream::EncodeError> {
+                use ::bin_data::stream::{Stream, dir};
+                use ::bin_data::named_args::{NamedArgs, InheritEndian, ArgsBuilderFinished};
+                #[allow(unused_variables)]
+                let Self { #(#fields),* } = self;
+                #(#temps)*
+                #(#entries)*
+                Ok(())
+            }
+        }
+    });
+}

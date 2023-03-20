@@ -20,10 +20,7 @@ pub struct Input {
 
 impl Input {
     pub fn fields(&self) -> impl Iterator<Item = &Field> {
-        self.entries.iter().filter_map(|entry| match entry {
-            Entry::Field(field @ Field { kind: FieldKind::Field(_), .. }) => Some(field),
-            _ => None,
-        })
+        self.entries.iter().filter_map(Entry::as_field)
     }
 }
 
@@ -52,6 +49,21 @@ pub enum Entry {
     Directive(Directive),
     /// Field and temporaries: `pub field: Type`
     Field(Field),
+}
+
+impl Entry {
+    fn as_kind(&self, p: impl FnOnce(&FieldKind) -> bool) -> Option<&Field> {
+        match self {
+            Entry::Field(field) if p(&field.kind) => Some(field),
+            _ => None,
+        }
+    }
+    pub fn as_field(&self) -> Option<&Field> {
+        self.as_kind(|kind| matches!(kind, FieldKind::Field(_)))
+    }
+    pub fn as_temp(&self) -> Option<&Field> {
+        self.as_kind(|kind| matches!(kind, FieldKind::Temp(_)))
+    }
 }
 
 impl Parse for Entry {

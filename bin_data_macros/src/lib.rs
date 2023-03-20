@@ -7,7 +7,7 @@ mod code_gen;
 
 use proc_macro2::TokenStream;
 use syn::parse_macro_input;
-use crate::code_gen::{extract_args, extract_struct, impl_decode};
+use crate::code_gen::{extract_args, extract_struct, impl_decode, impl_encode};
 use crate::input::{Entry, Input};
 
 /// Declare a binary data format.
@@ -24,5 +24,6 @@ pub fn bin_data(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         })
         .collect::<Vec<_>>();
     impl_decode(&input, &args, &field_args, &mut result);
+    impl_encode(&input, &args, &field_args, &mut result);
     result.into()
 }
