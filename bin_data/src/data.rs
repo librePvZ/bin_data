@@ -38,6 +38,15 @@ impl<Args, T: Encode<Args> + ?Sized> Encode<Args> for Box<T> {
     }
 }
 
+/// Marker trait: `U: View<T>` indicates that when we need to encode a value of type `T`, we can
+/// encode a value of `U` instead.
+pub trait View<T: ?Sized> {}
+
+impl<T: ?Sized> View<T> for &'_ T {}
+
+/// Used in automatically generated code to aid type inference.
+pub fn assert_is_view<T: ?Sized, U: View<T>>(x: U) -> U { x }
+
 /// Plain old data, can be directly encoded to and decoded from raw bytes.
 pub trait PlainData: Sized {
     /// Storage type for the raw bytes, typically a `[u8; N]`.
@@ -66,6 +75,8 @@ macro_rules! impl_primitive_plain_data {
                     }
                 }
             }
+
+            impl View<$t> for $t {}
 
             impl<Dir: Direction> NamedArgs<Dir> for $t {
                 type ArgsBuilder = EndianBuilder<Required>;

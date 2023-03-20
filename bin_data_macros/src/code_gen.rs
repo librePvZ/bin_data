@@ -171,17 +171,23 @@ pub fn impl_encode(
     let fields = input.fields().map(|field| &field.name);
     let entries = input.entries.iter().zip_eq(field_args);
     let temps = entries.clone()
-        .filter_map(|(entry, arg)| entry.as_temp()
-            .map(|field| (&field.name, &field.r#type, arg.as_ref().unwrap())))
+        .filter_map(|(entry, arg)| {
+            let field = entry.as_temp()?;
+            Some((&field.name, &field.r#type, arg.as_ref().unwrap()))
+        })
         .map(|(name, r#type, arg)| match arg.encode.calculate {
-            Some(value) => quote!(let #name: #r#type = #value;),
+            Some(value) => quote! {
+                let #name = ::bin_data::data::assert_is_view::<#r#type, _>(#value);
+            },
             None => quote_spanned! { name.span() =>
                 let #name: #r#type = compile_error!("temporary field requires an `encode` attribute");
             },
         });
     let entries = entries.clone()
-        .filter(|&(_, arg)| arg.as_ref()
-            .map_or(true, |arg| arg.decode.calculate.is_none()))
+        .filter(|&(_, arg)| match arg.as_ref() {
+            None => true,
+            Some(arg) => arg.decode.calculate.is_none(),
+        })
         .map(|(entry, arg)| encode_entry(&global_endian, entry, arg));
     let name = &input.name;
     result.extend(quote! {
