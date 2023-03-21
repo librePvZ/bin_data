@@ -5,7 +5,7 @@ use std::io::{Read, Write};
 use std::string::FromUtf8Error;
 use thiserror::Error;
 use crate::data::{Be, Le, PlainData};
-use crate::named_args::Endian;
+use crate::context::Endian;
 
 macro_rules! declare_type_enum {
     ($(#[$enum_meta:meta])*

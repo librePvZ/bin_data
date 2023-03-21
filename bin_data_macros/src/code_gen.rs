@@ -85,11 +85,11 @@ fn decide_endian(
 ) -> TokenStream {
     match local_endian {
         None if global_endian != EndianConfig::None => quote_spanned!(field_span => endian.into()),
-        None => quote_spanned!(field_span => ::bin_data::named_args::NoEndian),
+        None => quote_spanned!(field_span => ::bin_data::context::NoEndian),
         Some(local_endian) => match local_endian.value {
-            EndianConfig::None => quote_spanned!(local_endian.span() => ::bin_data::named_args::NoEndian),
-            EndianConfig::Little => quote_spanned!(local_endian.span() => ::bin_data::named_args::Endian::Little),
-            EndianConfig::Big => quote_spanned!(local_endian.span() => ::bin_data::named_args::Endian::Big),
+            EndianConfig::None => quote_spanned!(local_endian.span() => ::bin_data::context::NoEndian),
+            EndianConfig::Little => quote_spanned!(local_endian.span() => ::bin_data::context::Endian::Little),
+            EndianConfig::Big => quote_spanned!(local_endian.span() => ::bin_data::context::Endian::Big),
             EndianConfig::Inherit => quote_spanned!(local_endian.span() => endian),
         },
     }
@@ -136,11 +136,11 @@ pub fn impl_decode(
     let global_endian = global_endian.endian_input();
     let name = &input.name;
     result.extend(quote! {
-        impl #impl_generics ::bin_data::named_args::Context<::bin_data::stream::dir::Read>
+        impl #impl_generics ::bin_data::context::Context<::bin_data::stream::dir::Read>
             for #name #type_generics #where_clause {
             type EndianContext = #global_endian;
-            type ArgsBuilder = ::bin_data::named_args::NoArgs;
-            fn args_builder() -> Self::ArgsBuilder { ::bin_data::named_args::NoArgs }
+            type ArgsBuilder = ::bin_data::context::NoArgs;
+            fn args_builder() -> Self::ArgsBuilder { ::bin_data::context::NoArgs }
         }
         impl #impl_generics ::bin_data::data::Decode for #name #type_generics #where_clause {
             #[allow(unused_import)]
@@ -148,7 +148,7 @@ pub fn impl_decode(
                 -> Result<Self, ::bin_data::stream::DecodeError> {
                 #endian_overwrite
                 use ::bin_data::stream::{Stream, dir};
-                use ::bin_data::named_args::{Context, ArgsBuilderFinished};
+                use ::bin_data::context::{Context, ArgsBuilderFinished};
                 #(#entries)*
                 Ok(Self { #(#fields),* })
             }
@@ -212,11 +212,11 @@ pub fn impl_encode(
     let global_endian = global_endian.endian_input();
     let name = &input.name;
     result.extend(quote! {
-        impl #impl_generics ::bin_data::named_args::Context<::bin_data::stream::dir::Write>
+        impl #impl_generics ::bin_data::context::Context<::bin_data::stream::dir::Write>
             for #name #type_generics #where_clause {
             type EndianContext = #global_endian;
-            type ArgsBuilder = ::bin_data::named_args::NoArgs;
-            fn args_builder() -> Self::ArgsBuilder { ::bin_data::named_args::NoArgs }
+            type ArgsBuilder = ::bin_data::context::NoArgs;
+            fn args_builder() -> Self::ArgsBuilder { ::bin_data::context::NoArgs }
         }
         impl #impl_generics ::bin_data::data::Encode for #name #type_generics #where_clause {
             #[allow(unused_import)]
@@ -224,7 +224,7 @@ pub fn impl_encode(
                 -> Result<(), ::bin_data::stream::EncodeError> {
                 #endian_overwrite
                 use ::bin_data::stream::{Stream, dir};
-                use ::bin_data::named_args::{Context, ArgsBuilderFinished};
+                use ::bin_data::context::{Context, ArgsBuilderFinished};
                 #[allow(unused_variables)]
                 let Self { #(#fields),* } = self;
                 #(#temps)*

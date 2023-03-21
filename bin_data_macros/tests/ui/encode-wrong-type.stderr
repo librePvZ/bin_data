@@ -37,20 +37,20 @@ error[E0599]: the method `encode_with` exists for reference `&str`, but its trai
           `str: Encode<_>`
           which is required by `&str: Encode<_>`
 
-error[E0277]: the trait bound `str: bin_data::named_args::Context<bin_data::stream::dir::Write>` is not satisfied
+error[E0277]: the trait bound `str: bin_data::context::Context<bin_data::stream::dir::Write>` is not satisfied
  --> tests/ui/encode-wrong-type.rs:7:13
   |
 7 |         let temporary: u32,
-  |             ^^^^^^^^^ the trait `bin_data::named_args::Context<bin_data::stream::dir::Write>` is not implemented for `str`
+  |             ^^^^^^^^^ the trait `bin_data::context::Context<bin_data::stream::dir::Write>` is not implemented for `str`
   |
-  = help: the following other types implement trait `bin_data::named_args::Context<Dir>`:
-            <&'a T as bin_data::named_args::Context<bin_data::stream::dir::Write>>
-            <Be<T> as bin_data::named_args::Context<Dir>>
-            <Box<T> as bin_data::named_args::Context<bin_data::stream::dir::Write>>
-            <Box<[T]> as bin_data::named_args::Context<bin_data::stream::dir::Read>>
-            <Le<T> as bin_data::named_args::Context<Dir>>
-            <SliceView<'a, A, P> as bin_data::named_args::Context<bin_data::stream::dir::Write>>
-            <SliceViewRef<'a, A, P> as bin_data::named_args::Context<bin_data::stream::dir::Write>>
-            <Vec<T> as bin_data::named_args::Context<bin_data::stream::dir::Read>>
+  = help: the following other types implement trait `bin_data::context::Context<Dir>`:
+            <&'a T as bin_data::context::Context<bin_data::stream::dir::Write>>
+            <Be<T> as bin_data::context::Context<Dir>>
+            <Box<T> as bin_data::context::Context<bin_data::stream::dir::Write>>
+            <Box<[T]> as bin_data::context::Context<bin_data::stream::dir::Read>>
+            <Le<T> as bin_data::context::Context<Dir>>
+            <SliceView<'a, A, P> as bin_data::context::Context<bin_data::stream::dir::Write>>
+            <SliceViewRef<'a, A, P> as bin_data::context::Context<bin_data::stream::dir::Write>>
+            <Vec<T> as bin_data::context::Context<bin_data::stream::dir::Read>>
           and $N others
-  = note: required for `&str` to implement `bin_data::named_args::Context<bin_data::stream::dir::Write>`
+  = note: required for `&str` to implement `bin_data::context::Context<bin_data::stream::dir::Write>`

@@ -2,7 +2,7 @@
 
 use std::io::{Read, Write};
 use std::ops::Deref;
-use crate::named_args::{ArgsBuilderFinished, Endian, Context, Provided, Required, NoArgs, VecArgs, VecArgsBuilder, NoEndian};
+use crate::context::{ArgsBuilderFinished, Endian, Context, Provided, Required, NoArgs, VecArgs, VecArgsBuilder, NoEndian};
 use crate::stream::{dir, DecodeError, Direction, EncodeError};
 
 /// Decode binary data to structured in-memory representation.

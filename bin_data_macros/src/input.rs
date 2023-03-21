@@ -234,15 +234,15 @@ pub enum EndianConfig {
 impl EndianConfig {
     pub fn endian_input(self) -> TokenStream {
         match self {
-            EndianConfig::Inherit => quote!(::bin_data::named_args::Endian),
-            _ => quote!(::bin_data::named_args::NoEndian),
+            EndianConfig::Inherit => quote!(::bin_data::context::Endian),
+            _ => quote!(::bin_data::context::NoEndian),
         }
     }
 
     pub fn endian_overwrite(self) -> TokenStream {
         match self {
-            EndianConfig::Little => quote!(let endian = ::bin_data::named_args::Endian::Little;),
-            EndianConfig::Big => quote!(let endian = ::bin_data::named_args::Endian::Big;),
+            EndianConfig::Little => quote!(let endian = ::bin_data::context::Endian::Little;),
+            EndianConfig::Big => quote!(let endian = ::bin_data::context::Endian::Big;),
             _ => TokenStream::new(),
         }
     }
