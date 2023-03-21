@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use proc_macro2::{Ident, TokenStream};
-use quote::ToTokens;
+use quote::{quote, ToTokens};
 use syn::punctuated::Punctuated;
 use syn::{Token, parenthesized, braced, Attribute, Visibility, Type, Generics, Meta, Expr, Error, LitStr};
 use syn::parse::{Parse, ParseStream};
@@ -229,6 +229,23 @@ pub enum EndianConfig {
     Little,
     Big,
     Inherit,
+}
+
+impl EndianConfig {
+    pub fn endian_input(self) -> TokenStream {
+        match self {
+            EndianConfig::Inherit => quote!(::bin_data::named_args::Endian),
+            _ => quote!(::bin_data::named_args::NoEndian),
+        }
+    }
+
+    pub fn endian_overwrite(self) -> TokenStream {
+        match self {
+            EndianConfig::Little => quote!(let endian = ::bin_data::named_args::Endian::Little;),
+            EndianConfig::Big => quote!(let endian = ::bin_data::named_args::Endian::Big;),
+            _ => TokenStream::new(),
+        }
+    }
 }
 
 impl TryFrom<&'_ LitStr> for EndianConfig {

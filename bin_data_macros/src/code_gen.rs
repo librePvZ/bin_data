@@ -132,15 +132,8 @@ pub fn impl_decode(
     let global_endian = args.endian.map_or(EndianConfig::None, |t| t.value);
     let entries = input.entries.iter().zip_eq(field_args)
         .map(|(entry, arg)| decode_entry(global_endian, entry, arg));
-    let endian_overwrite = match global_endian {
-        EndianConfig::Little => quote!(let endian = ::bin_data::named_args::Endian::Little;),
-        EndianConfig::Big => quote!(let endian = ::bin_data::named_args::Endian::Big;),
-        _ => TokenStream::new(),
-    };
-    let global_endian = match global_endian {
-        EndianConfig::Inherit => quote!(::bin_data::named_args::Endian),
-        _ => quote!(::bin_data::named_args::NoEndian),
-    };
+    let endian_overwrite = global_endian.endian_overwrite();
+    let global_endian = global_endian.endian_input();
     let name = &input.name;
     result.extend(quote! {
         impl #impl_generics ::bin_data::named_args::Context<::bin_data::stream::dir::Read>
@@ -215,15 +208,8 @@ pub fn impl_encode(
             Some(arg) => arg.decode.calculate.is_none(),
         })
         .map(|(entry, arg)| encode_entry(global_endian, entry, arg));
-    let endian_overwrite = match global_endian {
-        EndianConfig::Little => quote!(let endian = ::bin_data::named_args::Endian::Little;),
-        EndianConfig::Big => quote!(let endian = ::bin_data::named_args::Endian::Big;),
-        _ => TokenStream::new(),
-    };
-    let global_endian = match global_endian {
-        EndianConfig::Inherit => quote!(::bin_data::named_args::Endian),
-        _ => quote!(::bin_data::named_args::NoEndian),
-    };
+    let endian_overwrite = global_endian.endian_overwrite();
+    let global_endian = global_endian.endian_input();
     let name = &input.name;
     result.extend(quote! {
         impl #impl_generics ::bin_data::named_args::Context<::bin_data::stream::dir::Write>
