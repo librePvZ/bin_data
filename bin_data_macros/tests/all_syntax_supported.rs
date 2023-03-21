@@ -1,13 +1,12 @@
 use bin_data::data::{Decode, Encode};
-use bin_data::named_args::Endian;
 use bin_data_macros::bin_data;
 
 bin_data! {
     /// some docs
     #[derive(Debug, Copy, Clone, PartialEq)]
-    #[bin_data(endian = Endian::Little)]
+    #[bin_data(endian = "little")]
     pub struct Test {
-        #[bin_data(endian = Endian::Big)]
+        #[bin_data(endian = "big")]
         some_private_field: i64,
         pub some_pub_field: u8,
         pub(in self) some_fancy_visibility: u32,

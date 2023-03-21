@@ -1,7 +1,29 @@
-error[E0277]: the trait bound `EndianBuilder<Required>: ArgsBuilderFinished` is not satisfied
+error[E0308]: mismatched types
  --> tests/ui/missing-argument.rs:5:9
   |
 5 |         this_field_needs_an_endian: u32,
-  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `ArgsBuilderFinished` is not implemented for `EndianBuilder<Required>`
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |         |
+  |         expected enum `Endian`, found struct `NoEndian`
+  |         arguments to this function are incorrect
   |
-  = help: the trait `ArgsBuilderFinished` is implemented for `EndianBuilder<Provided<Endian>>`
+note: associated function defined here
+ --> $WORKSPACE/bin_data/src/data.rs
+  |
+  |     fn decode_with<R: Read + ?Sized>(reader: &mut R, endian: Self::EndianContext, args: Args) -> Result<Self, DecodeError>;
+  |        ^^^^^^^^^^^
+
+error[E0308]: mismatched types
+ --> tests/ui/missing-argument.rs:5:9
+  |
+5 |         this_field_needs_an_endian: u32,
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |         |
+  |         expected enum `Endian`, found struct `NoEndian`
+  |         arguments to this method are incorrect
+  |
+note: associated function defined here
+ --> $WORKSPACE/bin_data/src/data.rs
+  |
+  |     fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, endian: Self::EndianContext, args: Args) -> Result<(), EncodeError>;
+  |        ^^^^^^^^^^^

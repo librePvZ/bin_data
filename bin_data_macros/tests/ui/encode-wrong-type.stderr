@@ -1,14 +1,14 @@
 error[E0277]: the trait bound `&str: View<u32>` is not satisfied
-  --> tests/ui/encode-wrong-type.rs:7:29
+  --> tests/ui/encode-wrong-type.rs:6:29
    |
-4  | / bin_data! {
-5  | |     #[bin_data(endian = Endian::Little)]
-6  | |     pub struct WrongType {
-7  | |         #[bin_data(encode = "u32 expected")]
+3  | / bin_data! {
+4  | |     #[bin_data(endian = "little")]
+5  | |     pub struct WrongType {
+6  | |         #[bin_data(encode = "u32 expected")]
    | |                             ^^^^^^^^^^^^^^ the trait `View<u32>` is not implemented for `&str`
 ...  |
-11 | |     }
-12 | | }
+10 | |     }
+11 | | }
    | |_- required by a bound introduced by this call
    |
    = help: the following other types implement trait `View<T>`:
@@ -28,29 +28,29 @@ note: required by a bound in `assert_is_view`
    |                                     ^^^^^^^ required by this bound in `assert_is_view`
 
 error[E0599]: the method `encode_with` exists for reference `&str`, but its trait bounds were not satisfied
- --> tests/ui/encode-wrong-type.rs:8:13
+ --> tests/ui/encode-wrong-type.rs:7:13
   |
-8 |         let temporary: u32,
+7 |         let temporary: u32,
   |             ^^^^^^^^^
   |
   = note: the following trait bounds were not satisfied:
           `str: Encode<_>`
           which is required by `&str: Encode<_>`
 
-error[E0277]: the trait bound `str: NamedArgs<bin_data::stream::dir::Write>` is not satisfied
- --> tests/ui/encode-wrong-type.rs:8:13
+error[E0277]: the trait bound `str: bin_data::named_args::Context<bin_data::stream::dir::Write>` is not satisfied
+ --> tests/ui/encode-wrong-type.rs:7:13
   |
-8 |         let temporary: u32,
-  |             ^^^^^^^^^ the trait `NamedArgs<bin_data::stream::dir::Write>` is not implemented for `str`
+7 |         let temporary: u32,
+  |             ^^^^^^^^^ the trait `bin_data::named_args::Context<bin_data::stream::dir::Write>` is not implemented for `str`
   |
-  = help: the following other types implement trait `NamedArgs<Dir>`:
-            <&'a T as NamedArgs<bin_data::stream::dir::Write>>
-            <Be<T> as NamedArgs<Dir>>
-            <Box<T> as NamedArgs<bin_data::stream::dir::Write>>
-            <Box<[T]> as NamedArgs<bin_data::stream::dir::Read>>
-            <Le<T> as NamedArgs<Dir>>
-            <SliceView<'a, A, P> as NamedArgs<bin_data::stream::dir::Write>>
-            <SliceViewRef<'a, A, P> as NamedArgs<bin_data::stream::dir::Write>>
-            <Vec<T> as NamedArgs<bin_data::stream::dir::Read>>
+  = help: the following other types implement trait `bin_data::named_args::Context<Dir>`:
+            <&'a T as bin_data::named_args::Context<bin_data::stream::dir::Write>>
+            <Be<T> as bin_data::named_args::Context<Dir>>
+            <Box<T> as bin_data::named_args::Context<bin_data::stream::dir::Write>>
+            <Box<[T]> as bin_data::named_args::Context<bin_data::stream::dir::Read>>
+            <Le<T> as bin_data::named_args::Context<Dir>>
+            <SliceView<'a, A, P> as bin_data::named_args::Context<bin_data::stream::dir::Write>>
+            <SliceViewRef<'a, A, P> as bin_data::named_args::Context<bin_data::stream::dir::Write>>
+            <Vec<T> as bin_data::named_args::Context<bin_data::stream::dir::Read>>
           and $N others
-  = note: required for `&str` to implement `NamedArgs<bin_data::stream::dir::Write>`
+  = note: required for `&str` to implement `bin_data::named_args::Context<bin_data::stream::dir::Write>`

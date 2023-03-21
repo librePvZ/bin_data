@@ -1,10 +1,33 @@
 //! Supporting type-level construct for named arguments.
 
-use std::marker::PhantomData;
 use crate::stream::Direction;
 
+/// Endianness for integers, floating-point numbers, etc.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum Endian {
+    /// Little-endian.
+    Little,
+    /// Big-endian.
+    Big,
+}
+
+/// Indicate the endianness is not determined at runtime.
+#[derive(Default, Debug, Copy, Clone)]
+pub struct NoEndian;
+
+mod sealed {
+    pub trait EndianContext: Copy + From<super::Endian> {}
+    impl EndianContext for super::Endian {}
+    impl EndianContext for super::NoEndian {}
+    impl From<super::Endian> for super::NoEndian {
+        fn from(_: super::Endian) -> Self { super::NoEndian }
+    }
+}
+
 /// Specify the named arguments used for decoding `Self`.
-pub trait NamedArgs<Dir: Direction> {
+pub trait Context<Dir: Direction> {
+    /// Context containing the desired endianness.
+    type EndianContext: sealed::EndianContext;
     /// The argument builder type.
     type ArgsBuilder;
     /// Create an argument builder with default settings.
@@ -41,173 +64,53 @@ pub struct Provided<T>(pub T);
 
 /// Arguments for encoding or decoding a [`Vec`].
 #[derive(Debug, Copy, Clone)]
-pub struct VecArgs<Args, U, F> {
+pub struct VecArgs<Args> {
     pub(crate) element_args: Args,
-    pub(crate) transform: F,
-    pub(crate) _marker: PhantomData<fn(U)>,
 }
 
 /// Named arguments builder for [`VecArgs`].
-#[derive(Debug, Copy, Clone)]
-pub struct VecArgsBuilder<Args, U, F> {
+#[derive(Default, Debug, Copy, Clone)]
+pub struct VecArgsBuilder<Args> {
     element_args: Args,
-    transform: F,
-    _marker: PhantomData<fn(U)>,
 }
 
-impl<T> VecArgsBuilder<Required, T, fn(T) -> T> {
+impl VecArgsBuilder<Provided<std::iter::Repeat<()>>> {
     pub(crate) fn new() -> Self {
-        VecArgsBuilder {
-            element_args: Required,
-            transform: std::convert::identity,
-            _marker: PhantomData,
-        }
+        VecArgsBuilder { element_args: Provided(std::iter::repeat(())) }
     }
 }
 
-impl<T> VecArgsBuilder<Provided<std::iter::Repeat<()>>, T, fn(&T) -> &T> {
-    pub(crate) fn new() -> Self {
-        VecArgsBuilder {
-            element_args: Provided(std::iter::repeat(())),
-            transform: |x| x,
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<T> VecArgsBuilder<Provided<std::iter::Repeat<()>>, T, fn(T) -> T> {
-    pub(crate) fn new_by_value() -> Self {
-        VecArgsBuilder {
-            element_args: Provided(std::iter::repeat(())),
-            transform: std::convert::identity,
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<U, F> VecArgsBuilder<Required, U, F> {
+impl<Args> VecArgsBuilder<Args> {
     /// Specify a series of arguments for decoding the elements in the [`Vec`].
-    pub fn args<I: IntoIterator>(self, args: I) -> VecArgsBuilder<Provided<I::IntoIter>, U, F> {
-        VecArgsBuilder {
-            element_args: Provided(args.into_iter()),
-            transform: self.transform,
-            _marker: self._marker,
-        }
-    }
-
-    /// Specify the expected number of elements in the [`Vec`].
-    pub fn count(self, n: usize) -> VecArgsBuilder<Provided<impl Iterator<Item = ()>>, U, F> {
-        VecArgsBuilder {
-            element_args: Provided(std::iter::repeat(()).take(n)),
-            transform: self.transform,
-            _marker: self._marker,
-        }
+    pub fn args<I: IntoIterator>(self, args: I) -> VecArgsBuilder<Provided<I::IntoIter>> {
+        VecArgsBuilder { element_args: Provided(args.into_iter()) }
     }
 }
 
-impl<Args, U, F> VecArgsBuilder<Provided<Args>, U, F> {
+impl VecArgsBuilder<Required> {
+    /// Specify the expected number of elements in the [`Vec`].
+    pub fn count(self, n: usize) -> VecArgsBuilder<Provided<impl Iterator<Item = ()>>> {
+        VecArgsBuilder { element_args: Provided(std::iter::repeat(()).take(n)) }
+    }
+}
+
+impl<Args> VecArgsBuilder<Provided<Args>> {
     /// Specify a shared argument for decoding all the elements in the [`Vec`].
-    pub fn arg<A>(self, arg: A) -> VecArgsBuilder<Provided<impl Iterator<Item = A>>, U, F>
+    pub fn arg<A>(self, arg: A) -> VecArgsBuilder<Provided<impl Iterator<Item = A>>>
         where A: Clone + 'static, Args: Iterator<Item = ()> {
-        VecArgsBuilder {
-            element_args: Provided(self.element_args.0.map(move |()| arg.clone())),
-            transform: self.transform,
-            _marker: self._marker,
-        }
+        VecArgsBuilder { element_args: Provided(self.element_args.0.map(move |()| arg.clone())) }
     }
 
     /// Transform the arguments before using it to decode the elements in the [`Vec`].
-    pub fn map_arg<B, G>(self, f: G) -> VecArgsBuilder<Provided<impl Iterator<Item = B>>, U, F>
+    pub fn map_arg<B, G>(self, f: G) -> VecArgsBuilder<Provided<impl Iterator<Item = B>>>
         where Args: Iterator, G: FnMut(Args::Item) -> B {
-        VecArgsBuilder {
-            element_args: Provided(self.element_args.0.map(f)),
-            transform: self.transform,
-            _marker: self._marker,
-        }
+        VecArgsBuilder { element_args: Provided(self.element_args.0.map(f)) }
     }
 }
 
-impl<Args, U, F> VecArgsBuilder<Args, U, F> {
-    /// Specify a function for transforming the result of decoding.
-    pub fn map<V, T, G: Fn(V) -> T>(self, f: G) -> VecArgsBuilder<Args, V, G> {
-        VecArgsBuilder {
-            element_args: self.element_args,
-            transform: f,
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<Args, U, F> ArgsBuilderFinished for VecArgsBuilder<Provided<Args>, U, F> {
-    type Output = VecArgs<Args, U, F>;
+impl<Args> ArgsBuilderFinished for VecArgsBuilder<Provided<Args>> {
+    type Output = VecArgs<Args>;
     fn finish(self) -> Self::Output {
-        VecArgs {
-            element_args: self.element_args.0,
-            transform: self.transform,
-            _marker: self._marker,
-        }
-    }
-}
-
-/// Endianness for integers, floating-point numbers, etc.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum Endian {
-    /// Little-endian.
-    Little,
-    /// Big-endian.
-    Big,
-}
-
-/// Named argument builder for data with endianness.
-#[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
-pub struct EndianBuilder<E> {
-    endian: E,
-}
-
-impl EndianBuilder<Required> {
-    /// Set the `endian` parameter for this named argument builder.
-    pub fn endian(self, endian: Endian) -> EndianBuilder<Provided<Endian>> {
-        EndianBuilder { endian: Provided(endian) }
-    }
-}
-
-impl ArgsBuilderFinished for EndianBuilder<Provided<Endian>> {
-    type Output = Endian;
-    fn finish(self) -> Endian { self.endian.0 }
-}
-
-/// Common interface for a named argument builder to inherit the [`Endian`] parameter.
-pub trait InheritEndian {
-    /// Result builder type after inheriting the [`Endian`].
-    type WithEndian;
-    /// Try to inherit the [`Endian`] as the `endian` parameter for this named argument builder. If
-    /// the `endian` parameter is already explicitly set, ignore this request.
-    fn inherit_endian(self, endian: Endian) -> Self::WithEndian;
-}
-
-impl InheritEndian for Required {
-    type WithEndian = Provided<Endian>;
-    fn inherit_endian(self, endian: Endian) -> Self::WithEndian { Provided(endian) }
-}
-
-impl InheritEndian for Provided<Endian> {
-    type WithEndian = Self;
-    fn inherit_endian(self, _endian: Endian) -> Self::WithEndian { self }
-}
-
-impl InheritEndian for NoArgs {
-    type WithEndian = Self;
-    fn inherit_endian(self, _endian: Endian) -> Self::WithEndian { self }
-}
-
-impl<Args, U, F> InheritEndian for VecArgsBuilder<Args, U, F> {
-    type WithEndian = Self;
-    fn inherit_endian(self, _endian: Endian) -> Self::WithEndian { self }
-}
-
-impl<E: InheritEndian> InheritEndian for EndianBuilder<E> {
-    type WithEndian = EndianBuilder<E::WithEndian>;
-    fn inherit_endian(self, endian: Endian) -> Self::WithEndian {
-        EndianBuilder { endian: self.endian.inherit_endian(endian) }
+        VecArgs { element_args: self.element_args.0 }
     }
 }

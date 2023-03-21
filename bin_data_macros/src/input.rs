@@ -2,7 +2,7 @@ use itertools::Itertools;
 use proc_macro2::{Ident, TokenStream};
 use quote::ToTokens;
 use syn::punctuated::Punctuated;
-use syn::{Token, parenthesized, braced, Attribute, Visibility, Type, Generics, Meta, Expr, Error};
+use syn::{Token, parenthesized, braced, Attribute, Visibility, Type, Generics, Meta, Expr, Error, LitStr};
 use syn::parse::{Parse, ParseStream};
 use syn::token::{Brace, Paren};
 
@@ -159,7 +159,7 @@ impl ToTokens for Field {
 }
 
 pub enum KnownAttribute {
-    Endian(Expr),
+    Endian(WithToken<LitStr, EndianConfig>),
     Encode(Expr),
     Decode(Expr),
     ArgsDecl {
@@ -180,7 +180,7 @@ impl KnownAttribute {
         let Meta::List(list) = attr.meta else { return Err(attr); };
         Ok(list.parse_args_with(|input: ParseStream| {
             let cmd: Ident = input.parse()?;
-            fn eq_expr<T>(input: ParseStream, f: impl FnOnce(Expr) -> T) -> Result<T, Error> {
+            fn eq_expr<E: Parse, T>(input: ParseStream, f: impl FnOnce(E) -> T) -> Result<T, Error> {
                 let _: Token![=] = input.parse()?;
                 input.parse().map(f)
             }
@@ -202,6 +202,46 @@ impl KnownAttribute {
                 _ => Err(Error::new(cmd.span(), "unknown attribute for `bin_data`")),
             }
         }))
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct WithToken<T, V> {
+    pub token: T,
+    pub value: V,
+}
+
+impl<T: Parse, V: for<'a> TryFrom<&'a T, Error = Error>> Parse for WithToken<T, V> {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let token = input.parse::<T>()?;
+        let value = V::try_from(&token)?;
+        Ok(WithToken { token, value })
+    }
+}
+
+impl<T: ToTokens, V> ToTokens for WithToken<T, V> {
+    fn to_tokens(&self, tokens: &mut TokenStream) { self.token.to_tokens(tokens) }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub enum EndianConfig {
+    None,
+    Little,
+    Big,
+    Inherit,
+}
+
+impl TryFrom<&'_ LitStr> for EndianConfig {
+    type Error = Error;
+    fn try_from(config: &LitStr) -> syn::Result<Self> {
+        const MSG: &str = "invalid endian configuration, must be one of `none`, `little`, `big`, `inherit`";
+        Ok(match config.value().as_str() {
+            "none" => EndianConfig::None,
+            "little" => EndianConfig::Little,
+            "big" => EndianConfig::Big,
+            "inherit" => EndianConfig::Inherit,
+            _ => return Err(Error::new(config.span(), MSG)),
+        })
     }
 }
 

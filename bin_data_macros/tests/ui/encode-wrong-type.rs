@@ -1,8 +1,7 @@
 use bin_data_macros::bin_data;
-use bin_data::named_args::Endian;
 
 bin_data! {
-    #[bin_data(endian = Endian::Little)]
+    #[bin_data(endian = "little")]
     pub struct WrongType {
         #[bin_data(encode = "u32 expected")]
         let temporary: u32,

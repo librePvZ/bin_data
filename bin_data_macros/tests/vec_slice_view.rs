@@ -1,19 +1,16 @@
 use bin_data::data::{Decode, Encode, SliceView};
-use bin_data::named_args::Endian;
 use bin_data_macros::bin_data;
 
 bin_data! {
     #[derive(Debug, Clone, Eq, PartialEq)]
-    #[bin_data(endian = Endian::Little)]
+    #[bin_data(endian = "little")]
     pub struct Test {
         #[bin_data(encode = values.len() as u32)]
         let length: u32,
-        #[bin_data(args:decode { count = length as usize, arg = Endian::Little })]
-        #[bin_data(args:encode { arg = Endian::Little })]
+        #[bin_data(args:decode { count = length as usize })]
         #[bin_data(encode = SliceView::new(values, |&(x, _)| x))]
         let xs: Vec<u8>,
-        #[bin_data(args:decode { count = length as usize, arg = Endian::Little })]
-        #[bin_data(args:encode { arg = Endian::Little })]
+        #[bin_data(args:decode { count = length as usize })]
         #[bin_data(encode = SliceView::new(values, |&(_, y)| y))]
         let ys: Vec<u16>,
         #[bin_data(decode = std::iter::zip(xs, ys).collect())]

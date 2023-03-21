@@ -2,60 +2,64 @@
 
 use std::io::{Read, Write};
 use std::ops::Deref;
-use crate::named_args::{ArgsBuilderFinished, Endian, EndianBuilder, InheritEndian, NamedArgs, Provided, Required, VecArgs, VecArgsBuilder};
+use crate::named_args::{ArgsBuilderFinished, Endian, Context, Provided, Required, NoArgs, VecArgs, VecArgsBuilder, NoEndian};
 use crate::stream::{dir, DecodeError, Direction, EncodeError};
 
 /// Decode binary data to structured in-memory representation.
-pub trait Decode<Args = ()>: NamedArgs<dir::Read> + Sized {
+pub trait Decode<Args = ()>: Context<dir::Read> + Sized {
     /// Decode an instance of `Self` from input stream with the given arguments.
-    fn decode_with<R: Read + ?Sized>(reader: &mut R, args: Args) -> Result<Self, DecodeError>;
+    fn decode_with<R: Read + ?Sized>(reader: &mut R, endian: Self::EndianContext, args: Args) -> Result<Self, DecodeError>;
     /// Decode an instance of `Self` from input stream with default arguments.
     fn decode<R: Read + ?Sized>(reader: &mut R) -> Result<Self, DecodeError>
-        where Self::ArgsBuilder: ArgsBuilderFinished<Output = Args> {
-        Self::decode_with(reader, Self::args_builder().finish())
+        where Self::EndianContext: Default, Self::ArgsBuilder: ArgsBuilderFinished<Output = Args> {
+        Self::decode_with(reader, Self::EndianContext::default(), Self::args_builder().finish())
     }
 }
 
 /// Encode binary data from structured in-memory representation.
-pub trait Encode<Args = ()>: NamedArgs<dir::Write> {
+pub trait Encode<Args = ()>: Context<dir::Write> {
     /// Encode `self` to the output stream with the given arguments.
-    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, args: Args) -> Result<(), EncodeError>;
+    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, endian: Self::EndianContext, args: Args) -> Result<(), EncodeError>;
     /// Encode `self` to the output stream with default arguments.
     fn encode<W: Write + ?Sized>(&self, writer: &mut W) -> Result<(), EncodeError>
-        where Self::ArgsBuilder: ArgsBuilderFinished<Output = Args> {
-        self.encode_with(writer, Self::args_builder().finish())
+        where Self::EndianContext: Default, Self::ArgsBuilder: ArgsBuilderFinished<Output = Args> {
+        self.encode_with(writer, Self::EndianContext::default(), Self::args_builder().finish())
     }
 }
 
-impl<'a, T: NamedArgs<dir::Write> + ?Sized> NamedArgs<dir::Write> for &'a T {
+impl<'a, T: Context<dir::Write> + ?Sized> Context<dir::Write> for &'a T {
+    type EndianContext = T::EndianContext;
     type ArgsBuilder = T::ArgsBuilder;
     fn args_builder() -> Self::ArgsBuilder { T::args_builder() }
 }
 
 impl<'a, Args, T: Encode<Args> + ?Sized> Encode<Args> for &'a T {
-    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, args: Args) -> Result<(), EncodeError> {
-        T::encode_with(self, writer, args)
+    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, endian: Self::EndianContext, args: Args) -> Result<(), EncodeError> {
+        T::encode_with(self, writer, endian, args)
     }
 }
 
-impl<T: NamedArgs<dir::Write> + ?Sized> NamedArgs<dir::Write> for Box<T> {
+impl<T: Context<dir::Write> + ?Sized> Context<dir::Write> for Box<T> {
+    type EndianContext = T::EndianContext;
     type ArgsBuilder = T::ArgsBuilder;
     fn args_builder() -> Self::ArgsBuilder { T::args_builder() }
 }
 
 impl<Args, T: Encode<Args> + ?Sized> Encode<Args> for Box<T> {
-    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, args: Args) -> Result<(), EncodeError> {
-        T::encode_with(self, writer, args)
+    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, endian: Self::EndianContext, args: Args) -> Result<(), EncodeError> {
+        T::encode_with(self, writer, endian, args)
     }
 }
 
-fn encode_iter<W, I, Args>(writer: &mut W, type_name: &'static str, iter: I, args: Args) -> Result<(), EncodeError>
+fn encode_iter<W, I, Args>(writer: &mut W, type_name: &'static str,
+                           endian: <I::Item as Context<dir::Write>>::EndianContext,
+                           iter: I, args: Args) -> Result<(), EncodeError>
     where W: Write + ?Sized, I: IntoIterator, Args: IntoIterator, I::Item: Encode<Args::Item> {
     let mut args = args.into_iter();
     iter.into_iter().try_for_each(|x| {
         let err = EncodeError::InvalidArgument(type_name, "not enough arguments");
         let arg = args.next().ok_or(err)?;
-        x.encode_with(writer, arg)
+        x.encode_with(writer, endian, arg)
     })
 }
 
@@ -97,15 +101,16 @@ impl<'a, 'b, T, U: 'a, P: Fn(&T) -> &U> IntoIterator for &'b SliceViewRef<'a, T,
     fn into_iter(self) -> Self::IntoIter { self.base_slice.iter().map(&self.projector) }
 }
 
-impl<'a, A, B: 'a, P: Fn(&A) -> &B> NamedArgs<dir::Write> for SliceViewRef<'a, A, P> {
-    type ArgsBuilder = VecArgsBuilder<Provided<std::iter::Repeat<()>>, B, fn(&B) -> &B>;
+impl<'a, A, B: Context<dir::Write> + 'a, P: Fn(&A) -> &B> Context<dir::Write> for SliceViewRef<'a, A, P> {
+    type EndianContext = B::EndianContext;
+    type ArgsBuilder = VecArgsBuilder<Provided<std::iter::Repeat<()>>>;
     fn args_builder() -> Self::ArgsBuilder { Self::ArgsBuilder::new() }
 }
 
-impl<'a, A, B: 'a, P: Fn(&A) -> &B, Args, U, F> Encode<VecArgs<Args, B, F>> for SliceViewRef<'a, A, P>
-    where Args: Iterator, U: Encode<Args::Item>, F: Fn(&B) -> &U {
-    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, args: VecArgs<Args, B, F>) -> Result<(), EncodeError> {
-        encode_iter(writer, "SliceViewRef", self.into_iter().map(&args.transform), args.element_args)
+impl<'a, A, B, P, Args> Encode<VecArgs<Args>> for SliceViewRef<'a, A, P>
+    where B: 'a, P: Fn(&A) -> &B, Args: Iterator, B: Encode<Args::Item> {
+    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, endian: Self::EndianContext, args: VecArgs<Args>) -> Result<(), EncodeError> {
+        encode_iter(writer, "SliceViewRef", endian, self, args.element_args)
     }
 }
 
@@ -139,15 +144,16 @@ impl<'a, 'b, T, U: 'a, P: Fn(&T) -> U> IntoIterator for &'b SliceView<'a, T, P> 
     fn into_iter(self) -> Self::IntoIter { self.base_slice.iter().map(&self.projector) }
 }
 
-impl<'a, A, B: 'a, P: Fn(&A) -> B> NamedArgs<dir::Write> for SliceView<'a, A, P> {
-    type ArgsBuilder = VecArgsBuilder<Provided<std::iter::Repeat<()>>, B, fn(B) -> B>;
-    fn args_builder() -> Self::ArgsBuilder { Self::ArgsBuilder::new_by_value() }
+impl<'a, A, B: Context<dir::Write>, P: Fn(&A) -> B> Context<dir::Write> for SliceView<'a, A, P> {
+    type EndianContext = B::EndianContext;
+    type ArgsBuilder = VecArgsBuilder<Provided<std::iter::Repeat<()>>>;
+    fn args_builder() -> Self::ArgsBuilder { Self::ArgsBuilder::new() }
 }
 
-impl<'a, A, B: 'a, P: Fn(&A) -> B, Args, U, F> Encode<VecArgs<Args, B, F>> for SliceView<'a, A, P>
-    where Args: Iterator, U: Encode<Args::Item>, F: Fn(B) -> U {
-    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, args: VecArgs<Args, B, F>) -> Result<(), EncodeError> {
-        encode_iter(writer, "SliceView", self.into_iter().map(&args.transform), args.element_args)
+impl<'a, A, B, P: Fn(&A) -> B, Args> Encode<VecArgs<Args>> for SliceView<'a, A, P>
+    where Args: Iterator, B: Encode<Args::Item> {
+    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, endian: Self::EndianContext, args: VecArgs<Args>) -> Result<(), EncodeError> {
+        encode_iter(writer, "SliceView", endian, self, args.element_args)
     }
 }
 
@@ -185,19 +191,20 @@ macro_rules! impl_primitive_plain_data {
 
             impl View<$t> for $t {}
 
-            impl<Dir: Direction> NamedArgs<Dir> for $t {
-                type ArgsBuilder = EndianBuilder<Required>;
-                fn args_builder() -> Self::ArgsBuilder { EndianBuilder::default() }
+            impl<Dir: Direction> Context<Dir> for $t {
+                type EndianContext = Endian;
+                type ArgsBuilder = NoArgs;
+                fn args_builder() -> Self::ArgsBuilder { NoArgs }
             }
 
-            impl Decode<Endian> for $t {
-                fn decode_with<R: Read + ?Sized>(reader: &mut R, endian: Endian) -> Result<Self, DecodeError> {
+            impl Decode for $t {
+                fn decode_with<R: Read + ?Sized>(reader: &mut R, endian: Endian, _args: ()) -> Result<Self, DecodeError> {
                     plain_data_decode_with(reader, endian)
                 }
             }
 
-            impl Encode<Endian> for $t {
-                fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, endian: Endian) -> Result<(), EncodeError> {
+            impl Encode for $t {
+                fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, endian: Endian, _args: ()) -> Result<(), EncodeError> {
                     plain_data_encode_with(self, writer, endian)
                 }
             }
@@ -234,25 +241,21 @@ fn plain_data_encode_with<T: PlainData, W: Write + ?Sized>(
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Le<T>(pub T);
 
-impl<Dir: Direction, T: NamedArgs<Dir>> NamedArgs<Dir> for Le<T>
-    where T::ArgsBuilder: InheritEndian {
-    type ArgsBuilder = <T::ArgsBuilder as InheritEndian>::WithEndian;
-    fn args_builder() -> Self::ArgsBuilder {
-        T::args_builder().inherit_endian(Endian::Little)
+impl<Dir: Direction, T: Context<Dir>> Context<Dir> for Le<T> {
+    type EndianContext = NoEndian;
+    type ArgsBuilder = T::ArgsBuilder;
+    fn args_builder() -> Self::ArgsBuilder { T::args_builder() }
+}
+
+impl<Args, T: Decode<Args>> Decode<Args> for Le<T> {
+    fn decode_with<R: Read + ?Sized>(reader: &mut R, _: NoEndian, args: Args) -> Result<Self, DecodeError> {
+        T::decode_with(reader, Endian::Little.into(), args).map(Le)
     }
 }
 
-impl<Args, T: Decode<Args>> Decode<Args> for Le<T>
-    where T::ArgsBuilder: InheritEndian {
-    fn decode_with<R: Read + ?Sized>(reader: &mut R, args: Args) -> Result<Self, DecodeError> {
-        T::decode_with(reader, args).map(Le)
-    }
-}
-
-impl<Args, T: Encode<Args>> Encode<Args> for Le<T>
-    where T::ArgsBuilder: InheritEndian {
-    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, args: Args) -> Result<(), EncodeError> {
-        self.0.encode_with(writer, args)
+impl<Args, T: Encode<Args>> Encode<Args> for Le<T> {
+    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, _: NoEndian, args: Args) -> Result<(), EncodeError> {
+        self.0.encode_with(writer, Endian::Little.into(), args)
     }
 }
 
@@ -260,72 +263,72 @@ impl<Args, T: Encode<Args>> Encode<Args> for Le<T>
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Be<T>(pub T);
 
-impl<Dir: Direction, T: NamedArgs<Dir>> NamedArgs<Dir> for Be<T>
-    where T::ArgsBuilder: InheritEndian {
-    type ArgsBuilder = <T::ArgsBuilder as InheritEndian>::WithEndian;
-    fn args_builder() -> Self::ArgsBuilder {
-        T::args_builder().inherit_endian(Endian::Big)
+impl<Dir: Direction, T: Context<Dir>> Context<Dir> for Be<T> {
+    type EndianContext = NoEndian;
+    type ArgsBuilder = T::ArgsBuilder;
+    fn args_builder() -> Self::ArgsBuilder { T::args_builder() }
+}
+
+impl<Args, T: Decode<Args>> Decode<Args> for Be<T> {
+    fn decode_with<R: Read + ?Sized>(reader: &mut R, _: NoEndian, args: Args) -> Result<Self, DecodeError> {
+        T::decode_with(reader, Endian::Big.into(), args).map(Be)
     }
 }
 
-impl<Args, T: Decode<Args>> Decode<Args> for Be<T>
-    where T::ArgsBuilder: InheritEndian {
-    fn decode_with<R: Read + ?Sized>(reader: &mut R, args: Args) -> Result<Self, DecodeError> {
-        T::decode_with(reader, args).map(Be)
+impl<Args, T: Encode<Args>> Encode<Args> for Be<T> {
+    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, _: NoEndian, args: Args) -> Result<(), EncodeError> {
+        self.0.encode_with(writer, Endian::Big.into(), args)
     }
 }
 
-impl<Args, T: Encode<Args>> Encode<Args> for Be<T>
-    where T::ArgsBuilder: InheritEndian {
-    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, args: Args) -> Result<(), EncodeError> {
-        self.0.encode_with(writer, args)
+impl<T: Context<dir::Read>> Context<dir::Read> for Vec<T> {
+    type EndianContext = T::EndianContext;
+    type ArgsBuilder = VecArgsBuilder<Required>;
+    fn args_builder() -> Self::ArgsBuilder { Self::ArgsBuilder::default() }
+}
+
+impl<Args, T> Decode<VecArgs<Args>> for Vec<T>
+    where Args: Iterator, T: Decode<Args::Item> {
+    fn decode_with<S: Read + ?Sized>(s: &mut S, endian: Self::EndianContext, args: VecArgs<Args>) -> Result<Self, DecodeError> {
+        args.element_args.map(|arg| T::decode_with(s, endian, arg)).collect()
     }
 }
 
-impl<T> NamedArgs<dir::Read> for Vec<T> {
-    type ArgsBuilder = VecArgsBuilder<Required, T, fn(T) -> T>;
+impl<T: Context<dir::Write>> Context<dir::Write> for Vec<T> {
+    type EndianContext = T::EndianContext;
+    type ArgsBuilder = VecArgsBuilder<Provided<std::iter::Repeat<()>>>;
     fn args_builder() -> Self::ArgsBuilder { Self::ArgsBuilder::new() }
 }
 
-impl<Args, U, T, F> Decode<VecArgs<Args, U, F>> for Vec<T>
-    where Args: Iterator, U: Decode<Args::Item>, F: Fn(U) -> T {
-    fn decode_with<S: Read + ?Sized>(s: &mut S, args: VecArgs<Args, U, F>) -> Result<Self, DecodeError> {
-        args.element_args.map(|arg| U::decode_with(s, arg).map(&args.transform)).collect()
+impl<Args, T> Encode<VecArgs<Args>> for Vec<T>
+    where Args: Iterator, T: Encode<Args::Item> {
+    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, endian: Self::EndianContext, args: VecArgs<Args>) -> Result<(), EncodeError> {
+        self.deref().encode_with(writer, endian, args)
     }
 }
 
-impl<T> NamedArgs<dir::Write> for Vec<T> {
-    type ArgsBuilder = VecArgsBuilder<Provided<std::iter::Repeat<()>>, T, fn(&T) -> &T>;
+impl<T: Context<dir::Write>> Context<dir::Write> for [T] {
+    type EndianContext = T::EndianContext;
+    type ArgsBuilder = VecArgsBuilder<Provided<std::iter::Repeat<()>>>;
     fn args_builder() -> Self::ArgsBuilder { Self::ArgsBuilder::new() }
 }
 
-impl<Args, U, T, F> Encode<VecArgs<Args, T, F>> for Vec<T>
-    where Args: Iterator, U: Encode<Args::Item>, F: Fn(&T) -> &U {
-    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, args: VecArgs<Args, T, F>) -> Result<(), EncodeError> {
-        self.deref().encode_with(writer, args)
+impl<Args, T> Encode<VecArgs<Args>> for [T]
+    where Args: Iterator, T: Encode<Args::Item> {
+    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, endian: Self::EndianContext, args: VecArgs<Args>) -> Result<(), EncodeError> {
+        encode_iter(writer, "Vec", endian, self, args.element_args)
     }
 }
 
-impl<T> NamedArgs<dir::Write> for [T] {
-    type ArgsBuilder = VecArgsBuilder<Provided<std::iter::Repeat<()>>, T, fn(&T) -> &T>;
-    fn args_builder() -> Self::ArgsBuilder { Self::ArgsBuilder::new() }
+impl<T: Context<dir::Read>> Context<dir::Read> for Box<[T]> {
+    type EndianContext = T::EndianContext;
+    type ArgsBuilder = VecArgsBuilder<Required>;
+    fn args_builder() -> Self::ArgsBuilder { Self::ArgsBuilder::default() }
 }
 
-impl<Args, U, T, F> Encode<VecArgs<Args, T, F>> for [T]
-    where Args: Iterator, U: Encode<Args::Item>, F: Fn(&T) -> &U {
-    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, args: VecArgs<Args, T, F>) -> Result<(), EncodeError> {
-        encode_iter(writer, "Vec", self.iter().map(args.transform), args.element_args)
-    }
-}
-
-impl<T> NamedArgs<dir::Read> for Box<[T]> {
-    type ArgsBuilder = VecArgsBuilder<Required, T, fn(T) -> T>;
-    fn args_builder() -> Self::ArgsBuilder { Self::ArgsBuilder::new() }
-}
-
-impl<Args, U, T, F> Decode<VecArgs<Args, U, F>> for Box<[T]>
-    where Args: Iterator, U: Decode<Args::Item>, F: Fn(U) -> T {
-    fn decode_with<S: Read + ?Sized>(s: &mut S, args: VecArgs<Args, U, F>) -> Result<Self, DecodeError> {
-        Vec::<T>::decode_with(s, args).map(Vec::into_boxed_slice)
+impl<Args, T> Decode<VecArgs<Args>> for Box<[T]>
+    where Args: Iterator, T: Decode<Args::Item> {
+    fn decode_with<S: Read + ?Sized>(s: &mut S, endian: Self::EndianContext, args: VecArgs<Args>) -> Result<Self, DecodeError> {
+        Vec::<T>::decode_with(s, endian, args).map(Vec::into_boxed_slice)
     }
 }

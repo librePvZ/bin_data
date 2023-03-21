@@ -1,5 +1,5 @@
 error: temporary field requires an `encode` attribute
- --> tests/ui/missing-encode-temporary.rs:7:13
+ --> tests/ui/missing-encode-temporary.rs:6:13
   |
-7 |         let temporary: u32,
+6 |         let temporary: u32,
   |             ^^^^^^^^^
