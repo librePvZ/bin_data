@@ -12,5 +12,12 @@ readme.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+macros = ["dep:bin_data_macros"]
+
 [dependencies]
 thiserror = "1.0.40"
+bin_data_macros = { path = "../bin_data_macros", optional = true }
+
+[dev-dependencies]
+bin_data_macros = { path = "../bin_data_macros" }

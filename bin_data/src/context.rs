@@ -1,4 +1,36 @@
-//! Supporting type-level construct for named arguments.
+//! Context for encoding and decoding.
+//!
+//! The types can be roughly grouped into two categories:
+//! - [`Context::EndianContext`]: explicit endianness specification and inheritance.
+//!     - [`Endian`]: little-endian or big-endian.
+//!     - [`NoEndian`]: endianness is not decided at runtime.
+//! - [`Context::ArgsBuilder`]: type-level construct for named arguments.
+//!     - [`NoArgs`]: no argument at all, or `Args = ()`.
+//!     - [`VecArgs`] and [`VecArgsBuilder`]: arguments for [`Vec`], [`slice`]s, etc.
+//!     - [`StrArgs`] and [`StrArgsBuilder`]: arguments for [`String`], [`str`], etc.
+//!
+//! Types in this module might appear in error messages, here is an overview:
+//! - **expected enum [`Endian`], found struct [`NoEndian`]**: endianness for one of the fields
+//!     must be specified. Add the following attribute: `#[bin_data(endian = "...")]`, either to
+//!     the whole `struct`, or to individual fields.
+//! - **expected struct [`NoEndian`], found enum [`Endian`]**: opposite situation to the previous
+//!     one, one of the fields require no runtime-specified endianness, but endianness is specified
+//!     explicitly using `#[bin_data(endian = "...")]`. Remove that superfluous attribute.
+//! - **_some argument builder_ does not implement [`ArgsBuilderFinished`]**: some [`Required`]
+//!     argument is not specified. Specify it in `#[bin_data(args { ... })]`. The arguments should
+//!     be given as `name = value`, separated and optionally ended by commas. Under the hood, it
+//!     calls the method `name` with argument `value` on the argument builder. For instance, the
+//!     following code set the expected length of a [`Vec`] by calling [`VecArgsBuilder::count`]:
+//!     ```
+//!     # bin_data_macros::bin_data! {
+//!     #     #[bin_data(endian = "inherit")]
+//!     #     struct Test {
+//!     #[bin_data(args:decode { count = 42 })]
+//!     xs: Vec<u8>,
+//!     #     }
+//!     # }
+//!     ```
+//! See also each type's documentation for detailed explanation.
 
 use crate::stream::Direction;
 
@@ -45,6 +77,12 @@ pub trait Context<Dir: Direction> {
 }
 
 /// Indicates that all arguments is supplied.
+///
+/// The `#[bin_data(args { ... })]` attribute specifies named arguments for encoding or decoding
+/// that field. After all required arguments are specified, the argument builder is transformed
+/// into a type implementing this trait, and we call [`ArgsBuilderFinished::finish`] to get the
+/// final arguments. If the compiler reports missing implementation for this trait, then there are
+/// some [`Required`] arguments not [`Provided`].
 pub trait ArgsBuilderFinished {
     /// The arguments type to be built by this argument builder.
     type Output;
@@ -78,6 +116,30 @@ pub struct VecArgs<Args> {
 }
 
 /// Named arguments builder for [`VecArgs`].
+///
+/// For maximum flexibility, we specify arguments for each element in the [`Vec`]. If the elements
+/// require no arguments (`Args = ()`), we only need a length for decoding, and we use [`count`]
+/// for this purpose. If the same argument could be shared by every element in the [`Vec`], we can
+/// use [`arg`] to specify that argument (requires [`Clone`]). Finally, for full control, we can
+/// use [`args`] to specify a separate argument for each element. Besides, [`map_arg`] could be
+/// used to transform the arguments.
+/// ```
+/// # use bin_data::context::{VecArgsBuilder, ArgsBuilderFinished, Required, VecArgs};
+/// fn builder() -> VecArgsBuilder<Required> { VecArgsBuilder::default() }
+/// fn get_args<I: Iterator>(args: VecArgs<I>) -> Vec<I::Item> { args.element_args.collect() }
+/// assert_eq!(vec![(), (), ()], get_args(builder().count(3).finish()));
+/// assert_eq!(vec![42, 42, 42], get_args(builder().count(3).arg(42).finish()));
+/// assert_eq!(vec![1, 2, 3], get_args(builder().args([1, 2, 3]).finish()));
+/// assert_eq!(vec![5, 6, 7], get_args(builder().args([1, 2, 3]).map_arg(|x| x + 4).finish()));
+/// ```
+///
+/// # Note
+/// The argument [`arg`] must be specified after [`count`].
+///
+/// [`count`]: VecArgsBuilder::count
+/// [`arg`]: VecArgsBuilder::arg
+/// [`args`]: VecArgsBuilder::args
+/// [`map_arg`]: VecArgsBuilder::map_arg
 #[derive(Default, Debug, Copy, Clone)]
 pub struct VecArgsBuilder<Args> {
     element_args: Args,
@@ -132,6 +194,14 @@ pub struct StrArgs {
 }
 
 /// Named arguments builder for [`StrArgs`].
+///
+/// This builder is relatively simple, use [`count`] to specify the length of the string.
+/// ```
+/// # use bin_data::context::{Required, StrArgs, StrArgsBuilder, ArgsBuilderFinished};
+/// assert_eq!(StrArgsBuilder::<Required>::default().count(42).finish().count, 42);
+/// ```
+///
+/// [`count`]: StrArgsBuilder::count
 #[derive(Default, Debug, Copy, Clone)]
 pub struct StrArgsBuilder<N> {
     count: N,

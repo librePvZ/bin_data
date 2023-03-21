@@ -86,6 +86,16 @@ impl<T: ?Sized> View<Box<T>> for &'_ T {}
 impl<T> View<Vec<T>> for &'_ [T] {}
 
 /// View into a slice, with every element projected using `P`.
+///
+/// ```
+/// # use bin_data::data::{SliceViewRef, Encode};
+/// let data = [(1_i32, "one"), (2_i32, "two")];
+/// let strings = SliceViewRef::new(&data, |&(_, s)| s);
+/// assert_eq!(strings.into_iter().collect::<Vec<_>>(), vec!["one", "two"]);
+/// let mut buffer = Vec::new();
+/// strings.encode(&mut buffer).unwrap();
+/// assert_eq!(buffer, "onetwo".as_bytes());
+/// ```
 #[derive(Debug, Copy, Clone)]
 pub struct SliceViewRef<'a, T, P> {
     base_slice: &'a [T],
@@ -93,7 +103,7 @@ pub struct SliceViewRef<'a, T, P> {
 }
 
 // the `Fn` bound for `P` should help type inference
-impl<'a, T, U: 'a, P: Fn(&T) -> &U> SliceViewRef<'a, T, P> {
+impl<'a, T, U: ?Sized + 'a, P: Fn(&T) -> &U> SliceViewRef<'a, T, P> {
     /// Create a new view into the slice.
     pub fn new(base_slice: &'a [T], projector: P) -> Self {
         SliceViewRef { base_slice, projector }
@@ -103,32 +113,46 @@ impl<'a, T, U: 'a, P: Fn(&T) -> &U> SliceViewRef<'a, T, P> {
 impl<'a, T, U: 'a, P: Fn(&T) -> &U> View<Vec<U>> for SliceViewRef<'a, T, P> {}
 impl<'a, T, U: 'a, P: Fn(&T) -> &U> View<Box<[U]>> for SliceViewRef<'a, T, P> {}
 
-impl<'a, T, U: 'a, P: Fn(&T) -> &U> IntoIterator for SliceViewRef<'a, T, P> {
+impl<'a, T, U: ?Sized + 'a, P: Fn(&T) -> &U> IntoIterator for SliceViewRef<'a, T, P> {
     type Item = &'a U;
     type IntoIter = std::iter::Map<std::slice::Iter<'a, T>, P>;
     fn into_iter(self) -> Self::IntoIter { self.base_slice.iter().map(self.projector) }
 }
 
-impl<'a, 'b, T, U: 'a, P: Fn(&T) -> &U> IntoIterator for &'b SliceViewRef<'a, T, P> {
+impl<'a, 'b, T, U: ?Sized + 'a, P: Fn(&T) -> &U> IntoIterator for &'b SliceViewRef<'a, T, P> {
     type Item = &'b U;
     type IntoIter = std::iter::Map<std::slice::Iter<'b, T>, &'b P>;
     fn into_iter(self) -> Self::IntoIter { self.base_slice.iter().map(&self.projector) }
 }
 
-impl<'a, A, B: Context<dir::Write> + 'a, P: Fn(&A) -> &B> Context<dir::Write> for SliceViewRef<'a, A, P> {
+impl<'a, A, B, P> Context<dir::Write> for SliceViewRef<'a, A, P>
+    where B: Context<dir::Write> + ?Sized + 'a, P: Fn(&A) -> &B {
     type EndianContext = B::EndianContext;
     type ArgsBuilder = VecArgsBuilder<Provided<std::iter::Repeat<()>>>;
     fn args_builder() -> Self::ArgsBuilder { Self::ArgsBuilder::new() }
 }
 
 impl<'a, A, B, P, Args> Encode<VecArgs<Args>> for SliceViewRef<'a, A, P>
-    where B: 'a, P: Fn(&A) -> &B, Args: Iterator, B: Encode<Args::Item> {
+    where B: ?Sized + 'a, P: Fn(&A) -> &B, Args: Iterator, B: Encode<Args::Item> {
     fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, endian: Self::EndianContext, args: VecArgs<Args>) -> Result<(), EncodeError> {
         encode_iter(writer, "SliceViewRef", endian, self, args.element_args)
     }
 }
 
 /// View into a slice, with every element projected using `P`.
+///
+/// ```
+/// # use bin_data::context::{Context, Endian, VecArgs, ArgsBuilderFinished};
+/// # use bin_data::data::{SliceView, Encode};
+/// # use bin_data::stream::dir;
+/// let data = [(1_i32, "one"), (2_i32, "two")];
+/// let nums = SliceView::new(&data, |&(n, _)| n);
+/// assert_eq!(nums.into_iter().collect::<Vec<_>>(), vec![1, 2]);
+/// let mut buffer = Vec::new();
+/// let args = <Vec<i32> as Context<dir::Write>>::args_builder().finish();
+/// nums.encode_with(&mut buffer, Endian::Little, args).unwrap();
+/// assert_eq!(buffer, [1, 0, 0, 0, 2, 0, 0, 0]);
+/// ```
 #[derive(Debug, Copy, Clone)]
 pub struct SliceView<'a, T, P> {
     base_slice: &'a [T],
@@ -252,6 +276,23 @@ fn plain_data_encode_with<T: PlainData, W: Write + ?Sized>(
 }
 
 /// Wrapper for little-endian data.
+///
+/// Use integers or floating point numbers as [`magic`](crate::stream::Stream::magic)s:
+/// ```
+/// # use bin_data::data::Le;
+/// # use bin_data::stream::Stream;
+/// let mut buffer = Vec::new();
+/// buffer.magic(Le(42_u16)).unwrap();
+/// assert_eq!(buffer, [42, 0]);
+/// ```
+///
+/// Type-level `#[bin_data(endian = "little")]`:
+/// ```
+/// # use bin_data::data::{Le, Encode};
+/// let mut buffer = Vec::new();
+/// Le(42_u16).encode(&mut buffer).unwrap();
+/// assert_eq!(buffer, [42, 0]);
+/// ```
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Le<T>(pub T);
 
@@ -274,6 +315,23 @@ impl<Args, T: Encode<Args>> Encode<Args> for Le<T> {
 }
 
 /// Wrapper for big-endian data.
+///
+/// Use integers or floating point numbers as [`magic`](crate::stream::Stream::magic)s:
+/// ```
+/// # use bin_data::data::Be;
+/// # use bin_data::stream::Stream;
+/// let mut buffer = Vec::new();
+/// buffer.magic(Be(42_u16)).unwrap();
+/// assert_eq!(buffer, [0, 42]);
+/// ```
+///
+/// Type-level `#[bin_data(endian = "little")]`:
+/// ```
+/// # use bin_data::data::{Be, Encode};
+/// let mut buffer = Vec::new();
+/// Be(42_u16).encode(&mut buffer).unwrap();
+/// assert_eq!(buffer, [0, 42]);
+/// ```
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Be<T>(pub T);
 
