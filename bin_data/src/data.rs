@@ -81,6 +81,7 @@ impl Decode for () {
 /// encode a value of `U` instead.
 pub trait View<T: ?Sized> {}
 
+impl<T> View<T> for T {}
 impl<T: ?Sized> View<T> for &'_ T {}
 impl<T: ?Sized> View<Box<T>> for &'_ T {}
 impl<T> View<Vec<T>> for &'_ [T] {}
@@ -226,8 +227,6 @@ macro_rules! impl_primitive_plain_data {
                     }
                 }
             }
-
-            impl View<$t> for $t {}
 
             impl<Dir: Direction> Context<Dir> for $t {
                 type EndianContext = Endian;
