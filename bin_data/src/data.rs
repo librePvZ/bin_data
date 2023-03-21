@@ -2,7 +2,7 @@
 
 use std::io::{Read, Write};
 use std::ops::Deref;
-use crate::context::{ArgsBuilderFinished, Endian, Context, Provided, Required, NoArgs, VecArgs, VecArgsBuilder, NoEndian};
+use crate::context::{ArgsBuilderFinished, Endian, Context, Provided, Required, NoArgs, VecArgs, VecArgsBuilder, NoEndian, StrArgs, StrArgsBuilder};
 use crate::stream::{dir, DecodeError, Direction, EncodeError};
 
 /// Decode binary data to structured in-memory representation.
@@ -344,5 +344,58 @@ impl<Args, T> Decode<VecArgs<Args>> for Box<[T]>
     where Args: Iterator, T: Decode<Args::Item> {
     fn decode_with<S: Read + ?Sized>(s: &mut S, endian: Self::EndianContext, args: VecArgs<Args>) -> Result<Self, DecodeError> {
         Vec::<T>::decode_with(s, endian, args).map(Vec::into_boxed_slice)
+    }
+}
+
+impl Context<dir::Read> for String {
+    type EndianContext = NoEndian;
+    type ArgsBuilder = StrArgsBuilder<Required>;
+    fn args_builder() -> StrArgsBuilder<Required> { StrArgsBuilder::default() }
+}
+
+impl Decode<StrArgs> for String {
+    fn decode_with<R: Read + ?Sized>(reader: &mut R, _: NoEndian, args: StrArgs) -> Result<Self, DecodeError> {
+        use DecodeError::IncompleteData;
+        let mut buffer = vec![0_u8; args.count];
+        reader.read_exact(&mut buffer).map_err(|err| IncompleteData("String", err))?;
+        String::from_utf8(buffer).map_err(DecodeError::from)
+    }
+}
+
+impl Context<dir::Write> for String {
+    type EndianContext = NoEndian;
+    type ArgsBuilder = NoArgs;
+    fn args_builder() -> NoArgs { NoArgs }
+}
+
+impl Encode for String {
+    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, _: NoEndian, _: ()) -> Result<(), EncodeError> {
+        writer.write_all(self.as_bytes()).map_err(EncodeError::from)
+    }
+}
+
+impl Context<dir::Read> for Box<str> {
+    type EndianContext = NoEndian;
+    type ArgsBuilder = StrArgsBuilder<Required>;
+    fn args_builder() -> StrArgsBuilder<Required> { StrArgsBuilder::default() }
+}
+
+impl Decode<StrArgs> for Box<str> {
+    fn decode_with<R: Read + ?Sized>(reader: &mut R, _: NoEndian, args: StrArgs) -> Result<Self, DecodeError> {
+        String::decode_with(reader, NoEndian, args).map(String::into_boxed_str)
+    }
+}
+
+impl View<String> for str {}
+
+impl Context<dir::Write> for str {
+    type EndianContext = NoEndian;
+    type ArgsBuilder = NoArgs;
+    fn args_builder() -> NoArgs { NoArgs }
+}
+
+impl Encode for str {
+    fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, _: NoEndian, _: ()) -> Result<(), EncodeError> {
+        writer.write_all(self.as_bytes()).map_err(EncodeError::from)
     }
 }

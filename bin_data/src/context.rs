@@ -73,7 +73,8 @@ pub struct Provided<T>(pub T);
 /// Arguments for encoding or decoding a [`Vec`].
 #[derive(Debug, Copy, Clone)]
 pub struct VecArgs<Args> {
-    pub(crate) element_args: Args,
+    /// Iterator of the actual arguments.
+    pub element_args: Args,
 }
 
 /// Named arguments builder for [`VecArgs`].
@@ -121,4 +122,29 @@ impl<Args> ArgsBuilderFinished for VecArgsBuilder<Provided<Args>> {
     fn finish(self) -> Self::Output {
         VecArgs { element_args: self.element_args.0 }
     }
+}
+
+/// Arguments for encoding or decoding a [`str`], [`String`], etc.
+#[derive(Debug, Copy, Clone)]
+pub struct StrArgs {
+    /// Number of bytes in this string.
+    pub count: usize,
+}
+
+/// Named arguments builder for [`StrArgs`].
+#[derive(Default, Debug, Copy, Clone)]
+pub struct StrArgsBuilder<N> {
+    count: N,
+}
+
+impl StrArgsBuilder<Required> {
+    /// Specify the expected number of bytes in the string.
+    pub fn count(self, n: usize) -> StrArgsBuilder<Provided<usize>> {
+        StrArgsBuilder { count: Provided(n) }
+    }
+}
+
+impl ArgsBuilderFinished for StrArgsBuilder<Provided<usize>> {
+    type Output = StrArgs;
+    fn finish(self) -> StrArgs { StrArgs { count: self.count.0 } }
 }

@@ -11,46 +11,9 @@ error[E0277]: the trait bound `&str: View<u32>` is not satisfied
 11 | | }
    | |_- required by a bound introduced by this call
    |
-   = help: the following other types implement trait `View<T>`:
-             <&T as View<Box<T>>>
-             <&T as View<T>>
-             <&[T] as View<Vec<T>>>
-             <SliceView<'a, T, P> as View<Box<[U]>>>
-             <SliceView<'a, T, P> as View<Vec<U>>>
-             <SliceViewRef<'a, T, P> as View<Box<[U]>>>
-             <SliceViewRef<'a, T, P> as View<Vec<U>>>
-             <f32 as View<f32>>
-           and $N others
+   = help: the trait `View<String>` is implemented for `str`
 note: required by a bound in `assert_is_view`
   --> $WORKSPACE/bin_data/src/data.rs
    |
    | pub fn assert_is_view<T: ?Sized, U: View<T>>(x: U) -> U { x }
    |                                     ^^^^^^^ required by this bound in `assert_is_view`
-
-error[E0599]: the method `encode_with` exists for reference `&str`, but its trait bounds were not satisfied
- --> tests/ui/encode-wrong-type.rs:7:13
-  |
-7 |         let temporary: u32,
-  |             ^^^^^^^^^
-  |
-  = note: the following trait bounds were not satisfied:
-          `str: Encode<_>`
-          which is required by `&str: Encode<_>`
-
-error[E0277]: the trait bound `str: bin_data::context::Context<bin_data::stream::dir::Write>` is not satisfied
- --> tests/ui/encode-wrong-type.rs:7:13
-  |
-7 |         let temporary: u32,
-  |             ^^^^^^^^^ the trait `bin_data::context::Context<bin_data::stream::dir::Write>` is not implemented for `str`
-  |
-  = help: the following other types implement trait `bin_data::context::Context<Dir>`:
-            <&'a T as bin_data::context::Context<bin_data::stream::dir::Write>>
-            <() as bin_data::context::Context<Dir>>
-            <Be<T> as bin_data::context::Context<Dir>>
-            <Box<T> as bin_data::context::Context<bin_data::stream::dir::Write>>
-            <Box<[T]> as bin_data::context::Context<bin_data::stream::dir::Read>>
-            <Le<T> as bin_data::context::Context<Dir>>
-            <SliceView<'a, A, P> as bin_data::context::Context<bin_data::stream::dir::Write>>
-            <SliceViewRef<'a, A, P> as bin_data::context::Context<bin_data::stream::dir::Write>>
-          and $N others
-  = note: required for `&str` to implement `bin_data::context::Context<bin_data::stream::dir::Write>`
