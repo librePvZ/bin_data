@@ -64,7 +64,7 @@ mod sealed {
     impl EndianContext for NoEndian { fn with_endian(_endian: Endian) -> Self { NoEndian } }
 }
 
-/// Specify the named arguments used for decoding `Self`.
+/// Specify the named argument builder and endianness context.
 pub trait Context<Dir: Direction> {
     /// Context containing the desired endianness.
     type EndianContext: sealed::EndianContext;
@@ -72,7 +72,9 @@ pub trait Context<Dir: Direction> {
     type ArgsBuilder;
     /// Create an argument builder with default settings.
     fn args_builder() -> Self::ArgsBuilder;
-    /// Create an argument builder with default settings.
+    /// Create an argument builder with default settings. Types of the values specified in
+    /// `#[bin_data(encode = ...)]` is unknown to the `bin_data` macro, so we use this method to
+    /// let the compiler infer a proper `Self` type and `Self::ArgsBuilder`.
     fn args_builder_of_val(&self) -> Self::ArgsBuilder { Self::args_builder() }
 }
 
