@@ -147,10 +147,14 @@ fn encode_entry(
             let args = args.as_ref().unwrap();
             let arg_setters = args.encode.arg_setters();
             let local_endian = args.endian.map(|endian| quote!(.inherit_endian(#endian)));
+            let builder = if args.encode.calculate.is_none() {
+                quote_spanned!(name.span() => <#r#type as NamedArgs<dir::Write>>::args_builder())
+            } else {
+                quote_spanned!(name.span() => NamedArgs::<dir::Write>::args_builder_of_val(&#name))
+            };
             quote_spanned! { name.span() =>
                 #name.encode_with(writer, ArgsBuilderFinished::finish(
-                    <#r#type as NamedArgs<dir::Write>>::args_builder()
-                    #arg_setters #local_endian #global_endian
+                    #builder #arg_setters #local_endian #global_endian
                 ))?;
             }
         }

@@ -9,6 +9,8 @@ pub trait NamedArgs<Dir: Direction> {
     type ArgsBuilder;
     /// Create an argument builder with default settings.
     fn args_builder() -> Self::ArgsBuilder;
+    /// Create an argument builder with default settings.
+    fn args_builder_of_val(&self) -> Self::ArgsBuilder { Self::args_builder() }
 }
 
 /// Indicates that all arguments is supplied.
@@ -68,6 +70,16 @@ impl<T> VecArgsBuilder<Provided<std::iter::Repeat<()>>, T, fn(&T) -> &T> {
         VecArgsBuilder {
             element_args: Provided(std::iter::repeat(())),
             transform: |x| x,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<T> VecArgsBuilder<Provided<std::iter::Repeat<()>>, T, fn(T) -> T> {
+    pub(crate) fn new_by_value() -> Self {
+        VecArgsBuilder {
+            element_args: Provided(std::iter::repeat(())),
+            transform: std::convert::identity,
             _marker: PhantomData,
         }
     }

@@ -10,11 +10,11 @@ bin_data! {
         let length: u32,
         #[bin_data(args:decode { count = length as usize, arg = Endian::Little })]
         #[bin_data(args:encode { arg = Endian::Little })]
-        #[bin_data(encode = SliceView::new(values, |(x, _)| x))]
+        #[bin_data(encode = SliceView::new(values, |&(x, _)| x))]
         let xs: Vec<u8>,
         #[bin_data(args:decode { count = length as usize, arg = Endian::Little })]
         #[bin_data(args:encode { arg = Endian::Little })]
-        #[bin_data(encode = SliceView::new(values, |(_, y)| y))]
+        #[bin_data(encode = SliceView::new(values, |&(_, y)| y))]
         let ys: Vec<u16>,
         #[bin_data(decode = std::iter::zip(xs, ys).collect())]
         pub values: Box<[(u8, u16)]>,

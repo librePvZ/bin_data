@@ -3,7 +3,7 @@ error[E0277]: the trait bound `&str: View<u32>` is not satisfied
    |
 4  | / bin_data! {
 5  | |     #[bin_data(endian = Endian::Little)]
-6  | |     pub struct MissingEndian {
+6  | |     pub struct WrongType {
 7  | |         #[bin_data(encode = "u32 expected")]
    | |                             ^^^^^^^^^^^^^^ the trait `View<u32>` is not implemented for `&str`
 ...  |
@@ -17,9 +17,9 @@ error[E0277]: the trait bound `&str: View<u32>` is not satisfied
              <&[T] as View<Vec<T>>>
              <SliceView<'a, T, P> as View<Box<[U]>>>
              <SliceView<'a, T, P> as View<Vec<U>>>
+             <SliceViewRef<'a, T, P> as View<Box<[U]>>>
+             <SliceViewRef<'a, T, P> as View<Vec<U>>>
              <f32 as View<f32>>
-             <f64 as View<f64>>
-             <i128 as View<i128>>
            and $N others
 note: required by a bound in `assert_is_view`
   --> $WORKSPACE/bin_data/src/data.rs
@@ -27,8 +27,30 @@ note: required by a bound in `assert_is_view`
    | pub fn assert_is_view<T: ?Sized, U: View<T>>(x: U) -> U { x }
    |                                     ^^^^^^^ required by this bound in `assert_is_view`
 
-error[E0599]: no method named `encode_with` found for reference `&str` in the current scope
+error[E0599]: the method `encode_with` exists for reference `&str`, but its trait bounds were not satisfied
  --> tests/ui/encode-wrong-type.rs:8:13
   |
 8 |         let temporary: u32,
-  |             ^^^^^^^^^ help: there is a method with a similar name: `ends_with`
+  |             ^^^^^^^^^
+  |
+  = note: the following trait bounds were not satisfied:
+          `str: Encode<_>`
+          which is required by `&str: Encode<_>`
+
+error[E0277]: the trait bound `str: NamedArgs<bin_data::stream::dir::Write>` is not satisfied
+ --> tests/ui/encode-wrong-type.rs:8:13
+  |
+8 |         let temporary: u32,
+  |             ^^^^^^^^^ the trait `NamedArgs<bin_data::stream::dir::Write>` is not implemented for `str`
+  |
+  = help: the following other types implement trait `NamedArgs<Dir>`:
+            <&'a T as NamedArgs<bin_data::stream::dir::Write>>
+            <Be<T> as NamedArgs<Dir>>
+            <Box<T> as NamedArgs<bin_data::stream::dir::Write>>
+            <Box<[T]> as NamedArgs<bin_data::stream::dir::Read>>
+            <Le<T> as NamedArgs<Dir>>
+            <SliceView<'a, A, P> as NamedArgs<bin_data::stream::dir::Write>>
+            <SliceViewRef<'a, A, P> as NamedArgs<bin_data::stream::dir::Write>>
+            <Vec<T> as NamedArgs<bin_data::stream::dir::Read>>
+          and $N others
+  = note: required for `&str` to implement `NamedArgs<bin_data::stream::dir::Write>`
