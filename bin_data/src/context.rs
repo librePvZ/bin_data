@@ -11,17 +11,25 @@ pub enum Endian {
     Big,
 }
 
+impl Endian {
+    /// Convert into an [`EndianContext`](Context::EndianContext).
+    ///
+    /// We deliberately do not use [`From`] and [`Into`] to avoid the compiler suggesting adding
+    /// `.into()`, because the error should not be fixed that way.
+    pub fn into_context<C: sealed::EndianContext>(self) -> C { C::with_endian(self) }
+}
+
 /// Indicate the endianness is not determined at runtime.
 #[derive(Default, Debug, Copy, Clone)]
 pub struct NoEndian;
 
 mod sealed {
-    pub trait EndianContext: Copy + From<super::Endian> {}
-    impl EndianContext for super::Endian {}
-    impl EndianContext for super::NoEndian {}
-    impl From<super::Endian> for super::NoEndian {
-        fn from(_: super::Endian) -> Self { super::NoEndian }
+    use super::{Endian, NoEndian};
+    pub trait EndianContext: Copy {
+        fn with_endian(endian: Endian) -> Self;
     }
+    impl EndianContext for Endian { fn with_endian(endian: Endian) -> Self { endian } }
+    impl EndianContext for NoEndian { fn with_endian(_endian: Endian) -> Self { NoEndian } }
 }
 
 /// Specify the named arguments used for decoding `Self`.

@@ -84,7 +84,7 @@ fn decide_endian(
     global_endian: EndianConfig,
 ) -> TokenStream {
     match local_endian {
-        None if global_endian != EndianConfig::None => quote_spanned!(field_span => endian.into()),
+        None if global_endian != EndianConfig::None => quote_spanned!(field_span => endian.into_context()),
         None => quote_spanned!(field_span => ::bin_data::context::NoEndian),
         Some(local_endian) => match local_endian.value {
             EndianConfig::None => quote_spanned!(local_endian.span() => ::bin_data::context::NoEndian),

@@ -263,13 +263,13 @@ impl<Dir: Direction, T: Context<Dir>> Context<Dir> for Le<T> {
 
 impl<Args, T: Decode<Args>> Decode<Args> for Le<T> {
     fn decode_with<R: Read + ?Sized>(reader: &mut R, _: NoEndian, args: Args) -> Result<Self, DecodeError> {
-        T::decode_with(reader, Endian::Little.into(), args).map(Le)
+        T::decode_with(reader, Endian::Little.into_context(), args).map(Le)
     }
 }
 
 impl<Args, T: Encode<Args>> Encode<Args> for Le<T> {
     fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, _: NoEndian, args: Args) -> Result<(), EncodeError> {
-        self.0.encode_with(writer, Endian::Little.into(), args)
+        self.0.encode_with(writer, Endian::Little.into_context(), args)
     }
 }
 
@@ -285,13 +285,13 @@ impl<Dir: Direction, T: Context<Dir>> Context<Dir> for Be<T> {
 
 impl<Args, T: Decode<Args>> Decode<Args> for Be<T> {
     fn decode_with<R: Read + ?Sized>(reader: &mut R, _: NoEndian, args: Args) -> Result<Self, DecodeError> {
-        T::decode_with(reader, Endian::Big.into(), args).map(Be)
+        T::decode_with(reader, Endian::Big.into_context(), args).map(Be)
     }
 }
 
 impl<Args, T: Encode<Args>> Encode<Args> for Be<T> {
     fn encode_with<W: Write + ?Sized>(&self, writer: &mut W, _: NoEndian, args: Args) -> Result<(), EncodeError> {
-        self.0.encode_with(writer, Endian::Big.into(), args)
+        self.0.encode_with(writer, Endian::Big.into_context(), args)
     }
 }
 
