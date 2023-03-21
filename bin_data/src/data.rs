@@ -63,6 +63,20 @@ fn encode_iter<W, I, Args>(writer: &mut W, type_name: &'static str,
     })
 }
 
+impl<Dir: Direction> Context<Dir> for () {
+    type EndianContext = NoEndian;
+    type ArgsBuilder = NoArgs;
+    fn args_builder() -> Self::ArgsBuilder { NoArgs }
+}
+
+impl Encode for () {
+    fn encode_with<W: Write + ?Sized>(&self, _writer: &mut W, _: NoEndian, _: ()) -> Result<(), EncodeError> { Ok(()) }
+}
+
+impl Decode for () {
+    fn decode_with<R: Read + ?Sized>(_reader: &mut R, _: NoEndian, _: ()) -> Result<Self, DecodeError> { Ok(()) }
+}
+
 /// Marker trait: `U: View<T>` indicates that when we need to encode a value of type `T`, we can
 /// encode a value of `U` instead.
 pub trait View<T: ?Sized> {}
