@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":[["DecodeError","Decoding errors."],["EncodeError","Encoding errors."]],"mod":[["dir","Direction tags: `Read` or `Write`. Provided for explicit scoping."]],"trait":[["Direction","Direction tags: `Read` or `Write`."],["IntoMagic","Types that can be used as magic sequence."],["Stream","Extensions shared by input and output streams."]]};

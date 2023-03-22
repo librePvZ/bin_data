@@ -1,0 +1,1 @@
+window.ALL_CRATES = ["bin_data","bin_data_macros","either","itertools","proc_macro2","quote","syn","thiserror","thiserror_impl","unicode_ident"];
